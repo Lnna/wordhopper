@@ -40,7 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: production
-      url: https://wordhopper.wingedge777.com/vertical/
+      url: https://wordhopper.baizeway.com/vertical/
     steps:
       - name: Download artifact
         uses: actions/download-artifact@v4
