@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WordHopper 竖屏版 — 视觉原型</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #1c1917;
+    font-family: 'Quicksand', 'Noto Sans SC', sans-serif;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 16px; min-height: 100vh;
+  }
+  h1 { color: #d1fae5; font-size: 18px; margin-bottom: 4px; }
+  .subtitle { color: #6b7280; font-size: 12px; margin-bottom: 12px; }
+
+  .nav { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin-bottom: 12px; max-width: 430px; }
+  .nav button {
+    border: 1px solid #15803d; background: transparent; color: #a7f3d0;
+    padding: 6px 10px; border-radius: 14px; font-size: 12px; cursor: pointer;
+    font-family: inherit;
+  }
+  .nav button.active { background: #15803d; color: #fff; }
+
+  .phone {
+    width: 390px; height: 720px; border-radius: 28px; overflow: hidden;
+    border: 6px solid #374151; position: relative;
+    background: linear-gradient(#ecfdf5 55%, #d1fae5 78%, #fef2f2 92%, #450a0a 100%);
+  }
+
+  [data-screen] { display: none; width: 100%; height: 100%; position: relative; }
+  [data-screen].is-active { display: block; }
+
+  /* ---------- HUD ---------- */
+  .hud {
+    position: absolute; top: 10px; left: 10px; right: 10px;
+    display: flex; justify-content: space-between; align-items: flex-start; z-index: 20;
+  }
+  .hud-pill {
+    background: rgba(21,128,61,.85); color: #fff; border-radius: 14px;
+    padding: 6px 12px; font-size: 12px; font-weight: 700; line-height: 1.5;
+  }
+  .hud-pill .dim { color: #d1fae5; font-weight: 400; }
+  .pause-btn {
+    width: 34px; height: 34px; border-radius: 50%; background: rgba(21,128,61,.85);
+    color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px;
+  }
+  .combo {
+    position: absolute; top: 54px; left: 50%; transform: translateX(-50%);
+    color: #15803d; font-size: 22px; font-weight: 700; z-index: 20;
+    text-shadow: 0 0 6px #fff, 0 0 3px #fff;
+  }
+
+  /* ---------- 桥（字母踏板 + 桥墩） ---------- */
+  .bridge {
+    position: absolute; left: 0; right: 0; top: 300px; z-index: 10;
+    display: flex; justify-content: center; gap: 6px;
+  }
+  .plank { display: flex; flex-direction: column; align-items: center; }
+  .plank .pier { font-size: 22px; line-height: 1; margin-top: 2px; filter: drop-shadow(0 2px 2px rgba(6,78,59,.25)); }
+
+  .ch {
+    width: 46px; height: 52px; border-radius: 10px;
+    background: rgba(255,253,245,.95); border: 2px solid #a7f3d0;
+    position: relative; display: flex; align-items: center; justify-content: center;
+    font-family: 'JetBrains Mono', monospace; font-size: 24px; font-weight: 700; color: #0f172a;
+    transition: transform .3s, opacity .3s, background .3s;
+  }
+  .ch .line {
+    position: absolute; left: -14%; top: 50%; width: 128%; height: 3px; border-radius: 2px;
+    transform-origin: 50% 50%; pointer-events: none;
+  }
+  .ch.idle .line { background: rgba(21,128,61,.28); height: 2px; }
+  .ch.current { border-color: #15803d; box-shadow: 0 0 0 3px rgba(34,197,94,.35); }
+  .ch.current .line.target { background: #15803d; height: 4px; }
+  .ch.current .line.main {
+    background: #d97706; height: 4px; left: -22%; width: 144%;
+    box-shadow: 0 0 6px rgba(217,119,6,.8);
+    transition: transform .5s cubic-bezier(.34,1.56,.64,1);
+  }
+  .ch.done { background: #22c55e; border-color: #22c55e; color: #fff; }
+  .ch.done .line { display: none; }
+  /* 塌陷踏板 */
+  .plank.broken .ch { opacity: .3; transform: rotate(14deg) translateY(10px); }
+  .plank.broken .pier { opacity: .3; filter: grayscale(1); }
+
+  /* ---------- 仓鼠 ---------- */
+  .hamster {
+    position: absolute; z-index: 15; font-size: 38px; line-height: 1;
+    left: calc(50% - 122px); top: 254px;   /* 桥面上方，位于第2-3踏板之间 */
+    filter: drop-shadow(0 2px 2px rgba(6,78,59,.3));
+  }
+  .hamster.falling { transition: transform 1.2s linear; transform: translateY(90px); }
+  .hamster.rising  { transition: transform .8s cubic-bezier(.34,1.56,.64,1); transform: translateY(0); }
+
+  /* ---------- 死亡线 ---------- */
+  .deathline {
+    position: absolute; left: 0; right: 0; bottom: 120px; z-index: 5;
+    border-top: 3px dashed rgba(220,38,38,.6);
+  }
+  .deathline span {
+    position: absolute; right: 8px; top: -18px; font-size: 10px; color: #dc2626; font-weight: 700;
+  }
+
+  /* ---------- 说明条 / 演示按钮 ---------- */
+  .note {
+    position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+    width: 92%; background: rgba(15,23,42,.78); color: #d1fae5; font-size: 11px;
+    border-radius: 10px; padding: 8px 10px; line-height: 1.5; z-index: 30;
+  }
+  .demo-btn {
+    position: absolute; top: 92px; left: 50%; transform: translateX(-50%); z-index: 30;
+    border: none; background: #d97706; color: #fff; font-weight: 700;
+    padding: 8px 16px; border-radius: 16px; font-size: 12px; cursor: pointer; font-family: inherit;
+  }
+  .demo-btn:disabled { opacity: .5; }
+
+  /* ---------- 菜单 / 结算 ---------- */
+  .center-col {
+    height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+    padding: 24px; text-align: center;
+  }
+  .logo { font-size: 40px; }
+  .title { font-size: 30px; font-weight: 700; color: #15803d; }
+  .card {
+    background: rgba(255,253,245,.92); border: 2px solid #a7f3d0; border-radius: 16px;
+    padding: 16px 22px; width: 100%;
+  }
+  .card .score-num { font-size: 40px; font-weight: 700; color: #0f172a; }
+  .card .label { font-size: 11px; color: #6b7280; letter-spacing: 1px; }
+  .btn-primary {
+    border: none; background: #15803d; color: #fff; font-size: 16px; font-weight: 700;
+    padding: 12px 34px; border-radius: 24px; cursor: pointer; font-family: inherit;
+  }
+  .btn-ghost {
+    border: 2px solid #15803d; background: transparent; color: #15803d; font-size: 13px; font-weight: 700;
+    padding: 8px 20px; border-radius: 20px; cursor: pointer; font-family: inherit;
+  }
+  .diff-row { display: flex; gap: 6px; justify-content: center; }
+  .diff-row span {
+    font-size: 11px; padding: 4px 10px; border-radius: 12px; border: 1px solid #a7f3d0; color: #15803d;
+    background: rgba(255,253,245,.8);
+  }
+  .diff-row span.sel { background: #15803d; color: #fff; }
+  .zh-mean { font-size: 13px; color: #059669; margin-top: 6px; }
+</style>
+</head>
+<body>
+  <h1>WordHopper 竖屏版 — 视觉原型</h1>
+  <div class="subtitle">机制 v2：仓鼠过桥 —— 未对齐就下坠，高度就是命 · 仅示意，非可玩实现</div>
+
+  <div class="nav">
+    <button data-go="menu" class="active">菜单</button>
+    <button data-go="bridge">过桥机制（核心画面）</button>
+    <button data-go="death">结算页</button>
+  </div>
+
+  <div class="phone">
+
+    <!-- ============ 菜单 ============ -->
+    <section data-screen="menu" class="is-active">
+      <div class="center-col">
+        <div class="logo">🐹</div>
+        <div class="title">WordHopper</div>
+        <div style="color:#6b7280;font-size:13px;">倾斜手机 · 对齐字母线 · 别让仓鼠掉下去</div>
+        <div class="diff-row">
+          <span>CHILL</span><span class="sel">EASY</span><span>MEDIUM</span><span>HARD</span>
+        </div>
+        <button class="btn-primary" data-go="bridge">开始（自动校准）</button>
+        <button class="btn-ghost">设置：倾斜 / 划线 · 音效</button>
+        <div style="font-size:11px;color:#6b7280;">BEST 12,480</div>
+      </div>
+    </section>
+
+    <!-- ============ 过桥机制 ============ -->
+    <section data-screen="bridge">
+      <div class="hud">
+        <div class="hud-pill">SCORE 3,215<br><span class="dim">SPEED 1.4x</span></div>
+        <div class="pause-btn">⏸</div>
+      </div>
+      <div class="combo">x4 COMBO</div>
+      <button class="demo-btn" id="demo">▶ 演示：未对齐 → 下坠 → 对齐 → 回升</button>
+
+      <!-- 桥：BRIDGE，B/R 已通过，I 当前，D/G/E 待激活 -->
+      <div class="bridge">
+        <div class="plank"><div class="ch done">B</div><div class="pier">🍄</div></div>
+        <div class="plank"><div class="ch done">R</div><div class="pier">🪵</div></div>
+        <div class="plank" id="plank-current">
+          <div class="ch current" id="ch-current">I
+            <div class="line target" style="transform: rotate(90deg);"></div>
+            <div class="line main" id="main-line" style="transform: rotate(55deg);"></div>
+          </div>
+          <div class="pier">🍄</div>
+        </div>
+        <div class="plank"><div class="ch idle">D<div class="line" style="transform: rotate(0deg);"></div></div><div class="pier">🌿</div></div>
+        <div class="plank"><div class="ch idle">G<div class="line" style="transform: rotate(135deg);"></div></div><div class="pier">🍄</div></div>
+        <div class="plank"><div class="ch idle">E<div class="line" style="transform: rotate(45deg);"></div></div><div class="pier">🪵</div></div>
+      </div>
+
+      <div class="hamster" id="hamster">🐹</div>
+
+      <div class="deathline"><span>死亡线</span></div>
+
+      <div class="note">桥从右向左滚动（仓鼠原地奔跑=匀速前进）。当前字母 I 未对齐 → 踏板踩空、仓鼠下坠；对齐后停止下坠并缓慢回升。字母区走完仍未对齐 → 踏板塌陷（断 combo），目标切下一字母，可救回；掉到死亡线 = 死。完成单词 → 跳跃到下一座桥，高度重置。</div>
+    </section>
+
+    <!-- ============ 结算页 ============ -->
+    <section data-screen="death">
+      <div class="center-col">
+        <div style="font-size:34px;">💥</div>
+        <div class="title" style="font-size:22px;">游戏结束</div>
+        <div class="card">
+          <div class="label">SCORE</div>
+          <div class="score-num">8,432</div>
+          <div class="label" style="margin-top:4px;">BEST 12,480</div>
+          <div style="display:flex;justify-content:space-around;margin-top:12px;">
+            <div><div style="font-weight:700;">26</div><div class="label">WORDS</div></div>
+            <div><div style="font-weight:700;">x7</div><div class="label">MAX COMBO</div></div>
+            <div><div style="font-weight:700;">BRIDGE</div><div class="label">BEST WORD</div></div>
+          </div>
+          <div class="zh-mean">本局释义回顾：bridge 桥 · brave 勇敢的 · …</div>
+        </div>
+        <button class="btn-primary">再来一局</button>
+        <button class="btn-ghost">分享成绩卡片</button>
+      </div>
+    </section>
+
+  </div>
+
+<script>
+  // 切屏
+  const screens = document.querySelectorAll('[data-screen]');
+  const navBtns = document.querySelectorAll('.nav button');
+  function go(name) {
+    screens.forEach(s => s.classList.toggle('is-active', s.dataset.screen === name));
+    navBtns.forEach(b => b.classList.toggle('active', b.dataset.go === name));
+  }
+  navBtns.forEach(b => b.addEventListener('click', () => go(b.dataset.go)));
+  document.querySelectorAll('[data-screen] [data-go]').forEach(b =>
+    b.addEventListener('click', () => go(b.dataset.go)));
+
+  // 演示序列：未对齐下坠 → 对齐 → 停止下坠 → 缓慢回升 → 踏板点亮
+  const demoBtn = document.getElementById('demo');
+  const hamster = document.getElementById('hamster');
+  const mainLine = document.getElementById('main-line');
+  const chCurrent = document.getElementById('ch-current');
+  const plankCurrent = document.getElementById('plank-current');
+  let timers = [];
+
+  function resetDemo() {
+    timers.forEach(clearTimeout); timers = [];
+    hamster.classList.remove('falling', 'rising');
+    mainLine.style.transform = 'rotate(55deg)';
+    chCurrent.classList.add('current');
+    chCurrent.classList.remove('done');
+    chCurrent.querySelectorAll('.line').forEach(l => l.style.display = '');
+    plankCurrent.classList.remove('broken');
+    demoBtn.disabled = false;
+    demoBtn.textContent = '▶ 演示：未对齐 → 下坠 → 对齐 → 回升';
+  }
+
+  demoBtn.addEventListener('click', () => {
+    resetDemo();
+    demoBtn.disabled = true;
+    demoBtn.textContent = '演示中…（未及时对齐，踏板踩空）';
+
+    // 1) 踏板踩空 + 仓鼠下坠
+    timers.push(setTimeout(() => {
+      plankCurrent.classList.add('broken');
+      hamster.classList.add('falling');
+      demoBtn.textContent = '演示中…（仓鼠下坠中，快对齐！）';
+    }, 400));
+
+    // 2) 主线对齐（下坠 1.2s 后）
+    timers.push(setTimeout(() => {
+      mainLine.style.transform = 'rotate(90deg)';
+      demoBtn.textContent = '演示中…（已对齐，停止下坠）';
+    }, 1600));
+
+    // 3) 停止下坠 → 缓慢回升
+    timers.push(setTimeout(() => {
+      hamster.classList.remove('falling');
+      hamster.classList.add('rising');
+      demoBtn.textContent = '演示中…（缓慢回升到桥面）';
+    }, 2100));
+
+    // 4) 踏板点亮
+    timers.push(setTimeout(() => {
+      chCurrent.classList.remove('current');
+      chCurrent.classList.add('done');
+      chCurrent.querySelectorAll('.line').forEach(l => l.style.display = 'none');
+      plankCurrent.classList.remove('broken');
+      demoBtn.textContent = '↩ 复位';
+      demoBtn.disabled = false;
+    }, 3000));
+  });
+
+  // 复位按钮状态
+  demoBtn.addEventListener('click', () => {
+    if (demoBtn.textContent === '↩ 复位') resetDemo();
+  });
+</script>
+</body>
+</html>

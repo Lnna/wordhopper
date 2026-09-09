@@ -1,238 +1,251 @@
 import Phaser from 'phaser';
 import {
-  GROUND_Y,
-  ObstacleType,
-  ObstacleLayout,
-  OBSTACLE_SPRITES,
+  APPROACH_SCALE_FAR,
+  APPROACH_SCALE_NEAR,
+  APPROACH_TOP_FAR,
+  APPROACH_TOP_NEAR,
+  BUBBLE_PER_ROW,
+  CANVAS_HEIGHT,
+  CANVAS_WIDTH,
+  HIT_PROGRESS,
   OBSTACLE_BODY_WIDTH,
-  OBSTACLE_VISUAL_WIDTH,
+  OBSTACLE_SPRITES,
+  OBSTACLE_VISUAL_BASE,
+  ObstacleType,
+  PLAYER_X,
 } from '../config/constants';
 import { COLORS, FONT_WORD } from '../config/colors';
-import { addCrispText, snapPixel } from '../config/text';
+import { addCrispText } from '../config/text';
 import { hex } from '../config/utils';
 
 export interface ObstacleConfig {
-  layout: ObstacleLayout;
   obstacleType: ObstacleType;
-  gapY: number;
-  gapHeight: number;
-  x: number;
-  word1: string;
-  word1Y: number;
-  word2: string;
-  word2Y: number;
+  word: string;
+  meaning: string;
+  progress: number;
 }
 
 export class Obstacle {
-  private upperSp: Phaser.GameObjects.Sprite | null = null;
-  private lowerSp: Phaser.GameObjects.Sprite | null = null;
-  private upperRect: Phaser.Geom.Rectangle | null = null;
-  private lowerRect: Phaser.Geom.Rectangle | null = null;
-  private word1Typed: Phaser.GameObjects.Text | null = null;
-  private word1Untyped: Phaser.GameObjects.Text | null = null;
-  private word2Typed: Phaser.GameObjects.Text | null = null;
-  private word2Untyped: Phaser.GameObjects.Text | null = null;
+  private scene: Phaser.Scene;
   private config: ObstacleConfig;
+  private root: Phaser.GameObjects.Container;
+  private sprite: Phaser.GameObjects.Sprite;
+  private bubbles: Phaser.GameObjects.Container[] = [];
+  private doneStrip: Phaser.GameObjects.Container;
+  private wordBlock: Phaser.GameObjects.Container;
+  private bubbleWrap!: Phaser.GameObjects.Container;
   private active = true;
+  private clearing = false;
+  private canJump = false;
+  private hitbox = new Phaser.Geom.Rectangle(0, 0, OBSTACLE_BODY_WIDTH, OBSTACLE_BODY_WIDTH);
 
-  constructor(scene: Phaser.Scene, config: ObstacleConfig, _scrollSpeed: number) {
-    this.config = config;
-    const textureKey = OBSTACLE_SPRITES[config.obstacleType];
+  constructor(scene: Phaser.Scene, config: ObstacleConfig) {
+    this.scene = scene;
+    this.config = { ...config };
+    this.root = scene.add.container(PLAYER_X, 0).setDepth(14);
 
-    if (config.layout !== ObstacleLayout.LowerOnly) {
-      const upperHeight = config.gapY - config.gapHeight / 2;
+    this.wordBlock = scene.add.container(0, 0);
+    this.doneStrip = scene.add.container(0, 0);
+    this.wordBlock.add(this.doneStrip);
+    this.buildBubbles(config.word);
+    this.root.add(this.wordBlock);
 
-      this.upperSp = scene.add.sprite(config.x, 0, textureKey);
-      this.upperSp.setOrigin(0.5, 0);
-      this.upperSp.setDisplaySize(OBSTACLE_VISUAL_WIDTH, upperHeight);
-      this.upperSp.setFlipY(true);
-      this.upperSp.setDepth(3);
+    this.sprite = scene.add.sprite(0, 0, OBSTACLE_SPRITES[config.obstacleType]);
+    this.sprite.setOrigin(0.5, 1);
+    this.sprite.setDisplaySize(OBSTACLE_VISUAL_BASE, OBSTACLE_VISUAL_BASE * 1.35);
+    this.root.add(this.sprite);
 
-      this.upperRect = new Phaser.Geom.Rectangle(
-        config.x - OBSTACLE_BODY_WIDTH / 2,
-        0,
-        OBSTACLE_BODY_WIDTH,
-        upperHeight
-      );
+    this.wordBlock.setY(-OBSTACLE_VISUAL_BASE * 1.35 - 18);
+
+    this.applyLayout();
+  }
+
+  private buildBubbles(word: string): void {
+    const letters = word.toUpperCase().split('');
+    this.bubbleWrap = this.scene.add.container(0, 0);
+    this.wordBlock.add(this.bubbleWrap);
+
+    for (let start = 0; start < letters.length; start += BUBBLE_PER_ROW) {
+      const row = this.scene.add.container(0, Math.floor(start / BUBBLE_PER_ROW) * 40);
+      const slice = letters.slice(start, start + BUBBLE_PER_ROW);
+      slice.forEach((ch, j) => {
+        const index = start + j;
+        const bubble = this.makeBubble(ch, index);
+        bubble.setPosition((j - (slice.length - 1) / 2) * 40, 0);
+        row.add(bubble);
+        this.bubbles[index] = bubble;
+      });
+      this.bubbleWrap.add(row);
     }
+    this.layoutDoneAndBubbles();
+    this.highlightNext();
+  }
 
-    if (config.layout !== ObstacleLayout.UpperOnly) {
-      const lowerTop = config.gapY + config.gapHeight / 2;
-      const lowerHeight = GROUND_Y - lowerTop;
+  private layoutDoneAndBubbles(): void {
+    const doneW = Math.max(12, this.doneStrip.list.length * 16);
+    this.doneStrip.setPosition(-doneW / 2 - 8, 0);
+    this.bubbleWrap.setPosition(doneW / 2 + 8, 0);
+  }
 
-      this.lowerSp = scene.add.sprite(config.x, lowerTop, textureKey);
-      this.lowerSp.setOrigin(0.5, 0);
-      this.lowerSp.setDisplaySize(OBSTACLE_VISUAL_WIDTH, lowerHeight);
-      this.lowerSp.setDepth(3);
-
-      this.lowerRect = new Phaser.Geom.Rectangle(
-        config.x - OBSTACLE_BODY_WIDTH / 2,
-        lowerTop,
-        OBSTACLE_BODY_WIDTH,
-        lowerHeight
-      );
-    }
-
-    const primaryColor = hex(COLORS.TEXT_ON_LIGHT);
-    const secondaryColor = hex(COLORS.TEXT_MUTED);
-
-    const wordStyle: Phaser.Types.GameObjects.Text.TextStyle = {
-      fontSize: '20px',
+  private makeBubble(letter: string, index: number): Phaser.GameObjects.Container {
+    const c = this.scene.add.container(0, 0);
+    const g = this.scene.add.graphics();
+    g.fillStyle(0x7dd3fc, 0.35);
+    g.fillCircle(0, 0, 15);
+    g.fillStyle(0xffffff, 0.55);
+    g.fillCircle(-5, -6, 5);
+    g.fillStyle(0xffffff, 0.3);
+    g.fillCircle(5, 6, 3);
+    g.lineStyle(2, 0xffffff, 0.7);
+    g.strokeCircle(0, 0, 15);
+    const t = addCrispText(this.scene, 0, 0, letter, {
+      fontSize: '14px',
       fontFamily: FONT_WORD,
+      color: '#1e3a2f',
       fontStyle: 'bold',
-      stroke: '#FFFDF5',
-      strokeThickness: 3,
-    };
-
-    const word1Full = config.word1;
-    this.word1Untyped = addCrispText(scene, config.x, config.word1Y, word1Full, {
-      ...wordStyle,
-      color: primaryColor,
+    }).setOrigin(0.5);
+    c.add([g, t]);
+    c.setSize(30, 30);
+    c.setInteractive({ useHandCursor: true });
+    c.setData('index', index);
+    c.setData('gfx', g);
+    c.setData('label', t);
+    c.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      pointer.event?.stopPropagation?.();
+      this.scene.events.emit('obstacle-bubble-tap', this, index);
     });
-    this.word1Untyped.setOrigin(0.5);
-    this.word1Untyped.setDepth(15);
-
-    this.word1Typed = addCrispText(scene, config.x, config.word1Y, '', {
-      ...wordStyle,
-      color: '#4ade80',
-    });
-    this.word1Typed.setOrigin(0.5);
-    this.word1Typed.setDepth(15);
-
-    if (config.word2) {
-      this.word2Untyped = addCrispText(scene, config.x, config.word2Y, config.word2, {
-        ...wordStyle,
-        color: secondaryColor,
-      });
-      this.word2Untyped.setOrigin(0.5);
-      this.word2Untyped.setDepth(15);
-
-      this.word2Typed = addCrispText(scene, config.x, config.word2Y, '', {
-        ...wordStyle,
-        color: '#4ade80',
-      });
-      this.word2Typed.setOrigin(0.5);
-      this.word2Typed.setDepth(15);
-    }
+    return c;
   }
 
-  update(dt: number, currentSpeed: number): void {
-    const dx = currentSpeed * dt;
-    this.config.x -= dx;
-
-    if (this.upperSp) this.upperSp.x = snapPixel(this.config.x);
-    if (this.lowerSp) this.lowerSp.x = snapPixel(this.config.x);
-    if (this.upperRect) this.upperRect.x = this.config.x - OBSTACLE_BODY_WIDTH / 2;
-    if (this.lowerRect) this.lowerRect.x = this.config.x - OBSTACLE_BODY_WIDTH / 2;
-
-    this.layoutWord(this.word1Typed, this.word1Untyped);
-    this.layoutWord(this.word2Typed, this.word2Untyped);
-
-    if (this.config.x < -80) {
-      this.active = false;
-    }
+  onCorrectTap(index: number): void {
+    const bubble = this.bubbles[index];
+    if (!bubble) return;
+    bubble.disableInteractive();
+    bubble.setVisible(false);
+    const letter = (bubble.getData('label') as Phaser.GameObjects.Text).text;
+    const ch = addCrispText(this.scene, this.doneStrip.list.length * 16, 0, letter, {
+      fontSize: '12px',
+      fontFamily: FONT_WORD,
+      color: '#14532d',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    const chBg = this.scene.add.graphics();
+    chBg.fillStyle(0x86efac, 0.9);
+    chBg.fillCircle(0, 0, 9);
+    chBg.lineStyle(1.5, 0x15803d, 0.55);
+    chBg.strokeCircle(0, 0, 9);
+    chBg.setPosition(this.doneStrip.list.length * 16, 0);
+    this.doneStrip.add([chBg, ch]);
+    this.layoutDoneAndBubbles();
+    this.highlightNext();
   }
 
-  getX(): number {
-    return this.config.x;
+  flashWrong(index: number): void {
+    const bubble = this.bubbles[index] ?? this.bubbles[this.getNextIndex()];
+    if (!bubble) return;
+    const label = bubble.getData('label') as Phaser.GameObjects.Text;
+    const prev = label.style.color;
+    label.setColor('#ef4444');
+    this.scene.time.delayedCall(120, () => {
+      if (label.active) label.setColor(prev || hex(COLORS.PRIMARY_DARK));
+    });
+  }
+
+  markComplete(): void {
+    this.canJump = true;
+    this.bubbles.forEach((b) => b?.disableInteractive());
+  }
+
+  highlightNext(): void {
+    const next = this.getNextIndex();
+    this.bubbles.forEach((b, i) => {
+      if (!b?.visible) return;
+      const g = b.getData('gfx') as Phaser.GameObjects.Graphics;
+      g.clear();
+      const isNext = i === next;
+      g.fillStyle(0x7dd3fc, isNext ? 0.55 : 0.35);
+      g.fillCircle(0, 0, 15);
+      g.fillStyle(0xffffff, 0.55);
+      g.fillCircle(-5, -6, 5);
+      g.fillStyle(0xffffff, 0.3);
+      g.fillCircle(5, 6, 3);
+      g.lineStyle(isNext ? 3 : 2, isNext ? 0xd97706 : 0xffffff, isNext ? 0.9 : 0.7);
+      g.strokeCircle(0, 0, 15);
+    });
+  }
+
+  private getNextIndex(): number {
+    return Math.floor(this.doneStrip.list.length / 2);
+  }
+
+  advance(dt: number, rate: number): void {
+    if (!this.active || this.clearing) return;
+    this.config.progress = Math.min(HIT_PROGRESS, this.config.progress + rate * dt);
+    this.applyLayout();
+  }
+
+  applyLayout(): void {
+    const p = this.config.progress;
+    const topRatio = APPROACH_TOP_FAR + p * (APPROACH_TOP_NEAR - APPROACH_TOP_FAR);
+    const scale = APPROACH_SCALE_FAR + p * (APPROACH_SCALE_NEAR - APPROACH_SCALE_FAR);
+    const y = topRatio * CANVAS_HEIGHT;
+    this.root.setPosition(PLAYER_X, y);
+    this.root.setScale(scale);
+    this.root.setAlpha(0.92 + p * 0.08);
+
+    const size = OBSTACLE_BODY_WIDTH * scale;
+    this.hitbox.setTo(PLAYER_X - size / 2, y - size, size, size);
+  }
+
+  getProgress(): number {
+    return this.config.progress;
+  }
+
+  getWord(): string {
+    return this.config.word;
+  }
+
+  getMeaning(): string {
+    return this.config.meaning;
+  }
+
+  getHitbox(): Phaser.Geom.Rectangle {
+    return this.hitbox;
   }
 
   isActive(): boolean {
     return this.active;
   }
 
-  getConfig(): ObstacleConfig {
-    return this.config;
+  isClearing(): boolean {
+    return this.clearing;
   }
 
-  getRects(): Phaser.Geom.Rectangle[] {
-    const list: Phaser.Geom.Rectangle[] = [];
-    if (this.upperRect) list.push(this.upperRect);
-    if (this.lowerRect) list.push(this.lowerRect);
-    return list;
+  isJumpReady(): boolean {
+    return this.canJump;
   }
 
-  highlightWord(_wordIndex: 1 | 2, charIndex: number): void {
-    const word = _wordIndex === 1 ? this.config.word1 : this.config.word2;
-    const untyped = _wordIndex === 1 ? this.word1Untyped : this.word2Untyped;
-    const typed = _wordIndex === 1 ? this.word1Typed : this.word2Typed;
-    if (!untyped || !typed || !word) return;
-
-    const green = word.slice(0, charIndex);
-    const rest = word.slice(charIndex);
-    typed.setText(green);
-    typed.setColor('#4ade80');
-    untyped.setText(rest);
-    untyped.setColor(_wordIndex === 1 ? hex(COLORS.TEXT_ON_LIGHT) : hex(COLORS.TEXT_MUTED));
-    this.layoutWord(typed, untyped);
-  }
-
-  resetWordDisplay(): void {
-    const primaryColor = hex(COLORS.TEXT_ON_LIGHT);
-    const secondaryColor = hex(COLORS.TEXT_MUTED);
-
-    this.word1Untyped?.setText(this.config.word1).setColor(primaryColor).setAlpha(1).setX(snapPixel(this.config.x));
-    this.word1Typed?.setText('').setColor('#4ade80').setAlpha(1);
-    this.word2Untyped?.setText(this.config.word2).setColor(secondaryColor).setAlpha(1).setX(snapPixel(this.config.x));
-    this.word2Typed?.setText('').setColor('#4ade80').setAlpha(1);
-    this.layoutWord(this.word1Typed, this.word1Untyped);
-    this.layoutWord(this.word2Typed, this.word2Untyped);
-  }
-
-  flashWrong(_wordIndex: 1 | 2): void {
-    const untyped = _wordIndex === 1 ? this.word1Untyped : this.word2Untyped;
-    const typed = _wordIndex === 1 ? this.word1Typed : this.word2Typed;
-    if (untyped) untyped.setColor('#ef4444');
-    if (typed) typed.setColor('#ef4444');
-  }
-
-  fadeUnselected(keepWordIndex: 1 | 2): void {
-    const fadeUntyped = keepWordIndex === 1 ? this.word2Untyped : this.word1Untyped;
-    const fadeTyped = keepWordIndex === 1 ? this.word2Typed : this.word1Typed;
-    if (fadeUntyped) fadeUntyped.setAlpha(0.2);
-    if (fadeTyped) fadeTyped.setAlpha(0.2);
-  }
-
-  clearWords(): void {
-    if (this.word1Untyped?.active) this.word1Untyped.destroy();
-    this.word1Untyped = null;
-    if (this.word1Typed?.active) this.word1Typed.destroy();
-    this.word1Typed = null;
-    if (this.word2Untyped?.active) this.word2Untyped.destroy();
-    this.word2Untyped = null;
-    if (this.word2Typed?.active) this.word2Typed.destroy();
-    this.word2Typed = null;
+  beginClear(onDone: () => void): void {
+    this.clearing = true;
+    this.active = true;
+    this.scene.tweens.add({
+      targets: this.root,
+      alpha: 0,
+      y: this.root.y - 40,
+      duration: 360,
+      delay: 400,
+      ease: 'Cubic.easeIn',
+      onComplete: () => {
+        this.active = false;
+        this.destroy();
+        onDone();
+      },
+    });
   }
 
   destroy(): void {
-    if (this.upperSp) this.upperSp.destroy();
-    if (this.lowerSp) this.lowerSp.destroy();
-    if (this.word1Untyped?.active) this.word1Untyped.destroy();
-    this.word1Untyped = null;
-    if (this.word1Typed?.active) this.word1Typed.destroy();
-    this.word1Typed = null;
-    if (this.word2Untyped?.active) this.word2Untyped.destroy();
-    this.word2Untyped = null;
-    if (this.word2Typed?.active) this.word2Typed.destroy();
-    this.word2Typed = null;
-  }
-
-  private layoutWord(
-    typed: Phaser.GameObjects.Text | null,
-    untyped: Phaser.GameObjects.Text | null
-  ): void {
-    if (!typed || !untyped || !typed.active || !untyped.active) {
-      return;
-    }
-
-    if (typed.text.length === 0) {
-      typed.x = snapPixel(this.config.x);
-      untyped.x = snapPixel(this.config.x);
-      return;
-    }
-
-    const fullWidth = typed.width + untyped.width;
-    typed.x = snapPixel(this.config.x - fullWidth / 2 + typed.width / 2);
-    untyped.x = snapPixel(this.config.x - fullWidth / 2 + typed.width + untyped.width / 2);
+    this.bubbles.forEach((b) => b?.destroy());
+    this.bubbles = [];
+    this.root.destroy(true);
   }
 }

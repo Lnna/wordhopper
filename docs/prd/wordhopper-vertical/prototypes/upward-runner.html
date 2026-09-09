@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WordHopper — 向上酷跑原型</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #1c1917;
+    font-family: 'Quicksand', 'Noto Sans SC', system-ui, sans-serif;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 16px; min-height: 100vh; color: #d1fae5;
+  }
+  h1 { font-size: 18px; margin-bottom: 4px; }
+  .sub { color: #6b7280; font-size: 12px; margin-bottom: 12px; text-align: center; max-width: 420px; line-height: 1.5; }
+
+  .phone {
+    width: 360px; height: 680px; border-radius: 28px; overflow: hidden;
+    border: 6px solid #374151; position: relative;
+    background: linear-gradient(#86efac 0%, #bbf7d0 35%, #ecfdf5 55%, #15803d 70%, #116530 100%);
+  }
+
+  /* 云（慢） */
+  .cloud {
+    position: absolute; z-index: 1; background: rgba(255,255,255,.8); border-radius: 40px;
+    animation: drift linear infinite;
+  }
+  .cloud::before, .cloud::after { content:''; position:absolute; background:inherit; border-radius:50%; }
+  .c1 { width:64px; height:20px; top:8%; left:8%; animation-duration:20s; }
+  .c1::before { width:26px; height:26px; top:-12px; left:10px; }
+  .c1::after { width:32px; height:32px; top:-16px; left:28px; }
+  .c2 { width:80px; height:22px; top:16%; left:55%; animation-duration:26s; animation-delay:-8s; }
+  .c2::before { width:30px; height:30px; top:-14px; left:14px; }
+  .c2::after { width:38px; height:38px; top:-18px; left:36px; }
+  @keyframes drift { from { transform: translateX(0); } to { transform: translateX(-80px); } }
+
+  /* ===== 第一版梯形路：贴底、上窄下宽，仓鼠站在路底 ===== */
+  .road-border {
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    width: 120%;
+    height: 82%;
+    transform: translateX(-50%);
+    z-index: 2;
+    background: #166534;
+    clip-path: polygon(16% 100%, 84% 100%, 60% 0%, 40% 0%);
+    opacity: .45;
+  }
+  .road {
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    width: 120%;
+    height: 82%;
+    transform: translateX(-50%);
+    z-index: 3;
+    background-color: #4ade80;
+    background-image: repeating-linear-gradient(
+      to top,
+      rgba(255,255,255,.45) 0 8px,
+      transparent 8px 32px
+    );
+    background-size: 100% 40px;
+    clip-path: polygon(18% 100%, 82% 100%, 58% 0%, 42% 0%);
+    opacity: .75;
+    animation: roadScroll 0.85s linear infinite;
+  }
+  /* 路边参考线已移除 */
+
+  /* 地面条压在梯形路最底，仓鼠站在上面贴着路 */
+  .ground {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 36px; z-index: 6;
+    background: linear-gradient(transparent, rgba(21,128,61,.85));
+    pointer-events: none;
+  }
+
+  .hud {
+    position: absolute; top: 10px; left: 10px; right: 10px; z-index: 30;
+    display: flex; justify-content: space-between;
+  }
+  .pill {
+    background: rgba(21,128,61,.9); color: #fff; border-radius: 14px;
+    padding: 6px 12px; font-size: 12px; font-weight: 700; line-height: 1.4;
+  }
+  .pause {
+    width: 34px; height: 34px; border-radius: 50%; background: rgba(21,128,61,.9);
+    color: #fff; display: grid; place-items: center; font-size: 13px;
+  }
+
+  /* 障碍：在梯形路上，从上（远）到下（近）放大，近处贴近仓鼠 */
+  .obs {
+    position: absolute; left: 50%; z-index: 12;
+    transform: translateX(-50%);
+    text-align: center;
+    transition: top .5s linear, transform .5s linear, opacity .3s;
+    filter: drop-shadow(0 2px 2px rgba(0,0,0,.25));
+  }
+  .obs .sprite { line-height: 1; display: block; }
+  .obs.far  { top: 18%; transform: translateX(-50%) scale(0.4); opacity: .65; }
+  .obs.mid  { top: 40%; transform: translateX(-50%) scale(0.75); opacity: .9; }
+  .obs.near { top: 58%; transform: translateX(-50%) scale(1.1); opacity: 1; }
+
+  .zone {
+    position: absolute; left: 20%; right: 20%; top: 58%; height: 56px; z-index: 11;
+    border: 3px solid #22c55e; border-radius: 10px;
+    background: rgba(34,197,94,.2);
+    box-shadow: 0 0 14px rgba(34,197,94,.5);
+    display: none;
+  }
+  .zone.on { display: block; animation: pulse .75s ease-in-out infinite; }
+  .zone span {
+    position: absolute; left: 50%; top: -18px; transform: translateX(-50%);
+    font-size: 10px; font-weight: 700; color: #15803d; white-space: nowrap;
+  }
+  @keyframes pulse {
+    0%,100% { box-shadow: 0 0 8px rgba(34,197,94,.35); }
+    50% { box-shadow: 0 0 18px rgba(34,197,94,.75); }
+  }
+
+  /* ===== align1 底稿；仓鼠换扁平 2D 贴图（减弱 3D），仍左倾约 10° ===== */
+  .ham-wrap {
+    position: absolute; left: 50%; bottom: 52px; z-index: 20;
+    transform: translateX(-50%) rotate(-10deg);
+    transform-origin: 50% 70%;
+    transition: bottom .32s cubic-bezier(.2,1.4,.4,1);
+  }
+  .ham-wrap.jump { bottom: 145px; }
+  .hamster {
+    width: 80px; height: 80px;
+    image-rendering: auto;
+    -webkit-backface-visibility: hidden;
+    background-image: url('./assets/ham34flat2.png');
+    background-repeat: no-repeat;
+    background-size: 320px 80px;
+    background-position: 0 0;
+  }
+  .ham-wrap.run .hamster { animation: run34 0.48s steps(1) infinite; }
+  .ham-wrap.jump .hamster {
+    animation: none;
+    background-image: url('./assets/ham34flat2j.png');
+    background-size: 80px 80px;
+    background-position: 0 0;
+  }
+  @keyframes run34 {
+    0%   { background-position: 0 0; }
+    25%  { background-position: -80px 0; }
+    50%  { background-position: -160px 0; }
+    75%  { background-position: -240px 0; }
+    100% { background-position: 0 0; }
+  }
+
+  .anno {
+    position: absolute; z-index: 40; font-size: 10px; font-weight: 700;
+    color: #0f172a; background: rgba(255,253,245,.93); border: 1px solid #a7f3d0;
+    border-radius: 8px; padding: 5px 7px; line-height: 1.35; max-width: 130px;
+  }
+
+  .tap-hint {
+    margin-top: 12px;
+    border: none; background: #d97706; color: #fff;
+    font-weight: 700; padding: 10px 16px; border-radius: 20px;
+    font-size: 12px; cursor: pointer; font-family: inherit;
+  }
+
+  .note {
+    margin-top: 10px; max-width: 360px; font-size: 12px; color: #a8a29e; line-height: 1.55;
+  }
+</style>
+</head>
+<body>
+  <h1>向上酷跑原型（朝向对齐路边）</h1>
+  <div class="sub">
+    仓鼠等比例缩小一倍；路边橙色参考虚线已去掉。强刷 <code>?v=size1</code>
+  </div>
+
+  <div class="phone" id="phone">
+    <div class="cloud c1"></div>
+    <div class="cloud c2"></div>
+
+    <div class="hud">
+      <div class="pill">SCORE 1,280<br><span style="color:#d1fae5;font-weight:400">SPEED 1.2x</span></div>
+      <div class="pause">⏸</div>
+    </div>
+
+    <div class="road-border"></div>
+    <div class="road" id="road"></div>
+
+    <div class="obs far" id="obs-far"><span class="sprite" style="font-size:22px">🪵</span></div>
+    <div class="obs mid" id="obs"><span class="sprite" style="font-size:34px">🍄</span></div>
+
+    <div class="zone" id="zone"><span>绿色时机窗 · 点屏幕上跳</span></div>
+
+    <div class="ham-wrap run" id="ham">
+      <div class="hamster" title="ham34flat2"></div>
+    </div>
+
+    <div class="ground"></div>
+
+    <div class="anno" style="top:10%;right:8px;">障碍从上方<br>（远处）逼近 ↓</div>
+    <div class="anno" style="top:42%;left:6px;">第一版梯形<br>贴底上窄下宽</div>
+    <div class="anno" style="bottom:130px;right:6px;">背影向前跑<br>点击向上跳</div>
+  </div>
+
+  <button class="tap-hint" id="demo">▶ 演示：逼近 → 绿窗 → 上跳</button>
+
+  <div class="note">
+    仓鼠 80×80（原 160 的一半）；无路边虚线。强刷 <code>?v=size1</code>。<br>
+    玩法 Tabs（多障/字母泡）见 <a href="./gameplay-tabs.html?v=tabs5" style="color:#fbbf24">gameplay-tabs.html</a> —— 不改动本页逻辑。
+  </div>
+
+<script>
+  const obs = document.getElementById('obs');
+  const zone = document.getElementById('zone');
+  const ham = document.getElementById('ham');
+  const demo = document.getElementById('demo');
+  const road = document.getElementById('road');
+  let phase = 'idle';
+
+  function reset() {
+    phase = 'idle';
+    obs.className = 'obs mid';
+    obs.querySelector('.sprite').textContent = '🍄';
+    obs.style.opacity = '';
+    zone.classList.remove('on');
+    ham.classList.remove('jump');
+    ham.classList.add('run');
+    road.style.animationDuration = '0.9s';
+    demo.textContent = '▶ 演示：逼近 → 绿窗 → 上跳';
+    demo.disabled = false;
+  }
+
+  demo.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (phase === 'ready') { doJump(); return; }
+    if (phase === 'done') { reset(); return; }
+    if (phase !== 'idle') return;
+
+    phase = 'approach';
+    demo.disabled = true;
+    demo.textContent = '障碍从远处逼近…';
+    road.style.animationDuration = '0.45s';
+
+    obs.className = 'obs far';
+    setTimeout(() => { obs.className = 'obs mid'; }, 600);
+    setTimeout(() => {
+      obs.className = 'obs near';
+      zone.classList.add('on');
+      phase = 'ready';
+      demo.textContent = '绿窗！点这里上跳 →';
+      demo.disabled = false;
+    }, 1300);
+  });
+
+  function doJump() {
+    if (phase !== 'ready') return;
+    phase = 'jump';
+    demo.disabled = true;
+    ham.classList.remove('run');
+    ham.classList.add('jump');
+    demo.textContent = '跃过！';
+    setTimeout(() => {
+      obs.style.opacity = '0';
+      zone.classList.remove('on');
+    }, 180);
+    setTimeout(() => {
+      ham.classList.remove('jump');
+      ham.classList.add('run');
+      obs.style.opacity = '';
+      obs.querySelector('.sprite').textContent = '🪵';
+      obs.className = 'obs far';
+      road.style.animationDuration = '0.9s';
+      phase = 'done';
+      demo.textContent = '↩ 复位';
+      demo.disabled = false;
+    }, 650);
+  }
+
+  document.getElementById('phone').addEventListener('click', (e) => {
+    if (e.target === demo) return;
+    if (phase === 'ready') doJump();
+  });
+</script>
+</body>
+</html>

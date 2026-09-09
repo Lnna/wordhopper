@@ -1,5 +1,5 @@
 import {
-  INITIAL_SCROLL_SPEED,
+  INITIAL_APPROACH_RATE,
   MAX_SPEED_MULTIPLIER,
   SPEED_INCREMENT,
 } from '../config/constants';
@@ -12,23 +12,18 @@ export class SpeedManager {
     this.baseMultiplier = m;
   }
 
+  /** Approach progress per second */
   getSpeed(): number {
-    return INITIAL_SCROLL_SPEED * this.baseMultiplier * this.multiplier;
+    return INITIAL_APPROACH_RATE * this.baseMultiplier * this.multiplier;
   }
 
   getSpeedMultiplier(): number {
     return this.baseMultiplier * this.multiplier;
   }
 
-  getCompressionFactor(): number {
-    return 1.0 / Math.sqrt(this.multiplier);
-  }
-
   onObstacleCleared(): void {
     if (this.multiplier >= MAX_SPEED_MULTIPLIER) return;
-
     this.multiplier += SPEED_INCREMENT;
-
     if (this.multiplier > MAX_SPEED_MULTIPLIER) {
       this.multiplier = MAX_SPEED_MULTIPLIER;
     }

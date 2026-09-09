@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { SpeedManager } from '../src/systems/SpeedManager';
+import { INITIAL_APPROACH_RATE } from '../src/config/constants';
 
 describe('SpeedManager', () => {
-  it('should return initial speed at start', () => {
+  it('should return initial approach rate at start', () => {
     const mgr = new SpeedManager();
-    expect(mgr.getSpeed()).toBe(200);
+    expect(mgr.getSpeed()).toBe(INITIAL_APPROACH_RATE);
     expect(mgr.getSpeedMultiplier()).toBe(1.0);
   });
 
@@ -24,22 +25,11 @@ describe('SpeedManager', () => {
     expect(mgr.getSpeedMultiplier()).toBeLessThanOrEqual(2.5);
   });
 
-  it('should compute compression factor', () => {
-    const mgr = new SpeedManager();
-    expect(mgr.getCompressionFactor()).toBe(1.0);
-    for (let i = 0; i < 100; i++) {
-      mgr.onObstacleCleared();
-    }
-    const factor = mgr.getCompressionFactor();
-    expect(factor).toBeLessThan(1.0);
-    expect(factor).toBeCloseTo(1.0 / Math.sqrt(mgr.getSpeedMultiplier()), 4);
-  });
-
   it('should reset', () => {
     const mgr = new SpeedManager();
     mgr.onObstacleCleared();
     mgr.reset();
-    expect(mgr.getSpeed()).toBe(200);
+    expect(mgr.getSpeed()).toBe(INITIAL_APPROACH_RATE);
     expect(mgr.getSpeedMultiplier()).toBe(1.0);
   });
 });

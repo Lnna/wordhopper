@@ -59,8 +59,9 @@ body.ios-layout {
 /* ── Game Shell ── */
 
 #game-shell {
-  width: 70vw;
-  aspect-ratio: 16 / 9;
+  width: min(420px, 92vw);
+  aspect-ratio: 9 / 16;
+  max-height: 92vh;
 }
 
 #game-shell canvas {

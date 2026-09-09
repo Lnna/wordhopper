@@ -1,11 +1,10 @@
 import Phaser from 'phaser';
 import {
   PLAYER_X,
+  PLAYER_Y,
   PLAYER_HEIGHT,
   PLAYER_WIDTH,
   PLAYER_COLLISION_SHRINK,
-  GROUND_Y,
-  GRAVITY,
   SPRITE_KEYS,
 } from '../config/constants';
 
@@ -13,26 +12,26 @@ const BW = Math.round(PLAYER_WIDTH * PLAYER_COLLISION_SHRINK);
 const BH = Math.round(PLAYER_HEIGHT * PLAYER_COLLISION_SHRINK);
 
 export class Player {
-  private sprite: Phaser.Physics.Arcade.Sprite;
+  private scene: Phaser.Scene;
+  private sprite: Phaser.GameObjects.Sprite;
   private dead = false;
+  private busy = false;
 
   constructor(scene: Phaser.Scene) {
-    this.sprite = scene.physics.add.sprite(PLAYER_X, GROUND_Y, SPRITE_KEYS.PLAYER_RUN);
+    this.scene = scene;
+    this.sprite = scene.add.sprite(PLAYER_X, PLAYER_Y, SPRITE_KEYS.PLAYER_RUN);
     this.sprite.setOrigin(0.5, 1);
     this.sprite.setDisplaySize(PLAYER_WIDTH, PLAYER_HEIGHT);
-    this.sprite.setDepth(10);
-    this.sprite.setGravityY(GRAVITY);
-    this.sprite.setCollideWorldBounds(true);
-    this.sprite.setBounce(0);
+    this.sprite.setDepth(20);
+    this.sprite.setAngle(-10);
     this.sprite.play(SPRITE_KEYS.PLAYER_RUN_ANIM);
   }
 
-  update(_deltaMs: number): void {
-    if (this.sprite.body!.blocked.down && !this.dead) {
-      if (!this.sprite.anims.isPlaying || this.sprite.texture.key !== SPRITE_KEYS.PLAYER_RUN) {
-        this.sprite.setTexture(SPRITE_KEYS.PLAYER_RUN);
-        this.sprite.play(SPRITE_KEYS.PLAYER_RUN_ANIM, true);
-      }
+  update(): void {
+    if (this.dead || this.busy) return;
+    if (!this.sprite.anims.isPlaying || this.sprite.texture.key !== SPRITE_KEYS.PLAYER_RUN) {
+      this.sprite.setTexture(SPRITE_KEYS.PLAYER_RUN);
+      this.sprite.play(SPRITE_KEYS.PLAYER_RUN_ANIM, true);
     }
   }
 
@@ -45,31 +44,77 @@ export class Player {
     );
   }
 
-  jumpTo(targetY: number): void {
-    const height = GROUND_Y - targetY;
-    if (height <= 0) return;
-    const vy = -Math.sqrt(2 * GRAVITY * height);
-    this.sprite.setVelocityY(vy);
-    this.sprite.stop();
-    this.sprite.setTexture(SPRITE_KEYS.PLAYER_JUMP);
+  isBusy(): boolean {
+    return this.busy;
   }
 
-  jumpToWord(wordY: number): void {
-    this.jumpTo(wordY);
+  /** Outside timing window: small in-place hop */
+  emptyHop(): void {
+    if (this.dead || this.busy) return;
+    this.busy = true;
+    this.sprite.stop();
+    this.sprite.setTexture(SPRITE_KEYS.PLAYER_JUMP);
+    this.scene.tweens.add({
+      targets: this.sprite,
+      y: PLAYER_Y - 28,
+      duration: 140,
+      yoyo: true,
+      ease: 'Sine.easeOut',
+      onComplete: () => {
+        this.sprite.y = PLAYER_Y;
+        this.busy = false;
+        if (!this.dead) {
+          this.sprite.setTexture(SPRITE_KEYS.PLAYER_RUN);
+          this.sprite.play(SPRITE_KEYS.PLAYER_RUN_ANIM, true);
+        }
+      },
+    });
+  }
+
+  /** Inside window: jump over obstacle; call onApex near apex for fade */
+  clearJump(onApex: () => void, onDone: () => void): void {
+    if (this.dead || this.busy) return;
+    this.busy = true;
+    this.sprite.stop();
+    this.sprite.setTexture(SPRITE_KEYS.PLAYER_JUMP);
+    this.scene.tweens.add({
+      targets: this.sprite,
+      y: PLAYER_Y - 226,
+      duration: 420,
+      ease: 'Cubic.easeOut',
+      onComplete: () => {
+        onApex();
+        this.scene.tweens.add({
+          targets: this.sprite,
+          y: PLAYER_Y,
+          duration: 340,
+          ease: 'Cubic.easeIn',
+          onComplete: () => {
+            this.busy = false;
+            if (!this.dead) {
+              this.sprite.setTexture(SPRITE_KEYS.PLAYER_RUN);
+              this.sprite.play(SPRITE_KEYS.PLAYER_RUN_ANIM, true);
+            }
+            onDone();
+          },
+        });
+      },
+    });
   }
 
   die(): void {
     this.dead = true;
+    this.busy = false;
+    this.scene.tweens.killTweensOf(this.sprite);
     this.sprite.stop();
     this.sprite.setTexture(SPRITE_KEYS.PLAYER_DEAD);
-    this.sprite.setVelocityY(0);
-    this.sprite.setVelocityX(0);
+    this.sprite.y = PLAYER_Y;
   }
 
   reset(): void {
     this.dead = false;
-    this.sprite.setPosition(PLAYER_X, GROUND_Y);
-    this.sprite.setVelocity(0, 0);
+    this.busy = false;
+    this.sprite.setPosition(PLAYER_X, PLAYER_Y);
     this.sprite.setTexture(SPRITE_KEYS.PLAYER_RUN);
     this.sprite.play(SPRITE_KEYS.PLAYER_RUN_ANIM);
   }

@@ -21,6 +21,7 @@ export interface DeathData {
   bestWord: string;
   maxCombo: number;
   difficulty: Difficulty;
+  meanings?: string[];
 }
 
 export async function shareResult(data: { title: string; url: string }): Promise<boolean> {
@@ -76,7 +77,7 @@ export class DeathScene extends Phaser.Scene {
 
     const panelGfx = this.add.graphics();
     panelGfx.fillStyle(COLORS.SURFACE, 1);
-    panelGfx.fillRoundedRect(w / 2 - 180, 8, 360, h - 16, 24);
+    panelGfx.fillRoundedRect(w / 2 - 190, 24, 380, h - 48, 24);
     panelGfx.setDepth(6);
 
     const siX = w / 2 + 142;
@@ -111,12 +112,12 @@ export class DeathScene extends Phaser.Scene {
       fontStyle: 'bold',
     }).setOrigin(0.5).setDepth(10).setAlpha(0);
 
-    const liu = this.add.sprite(w / 2, 48, SPRITE_KEYS.PLAYER_DEAD);
-    liu.setDisplaySize(52, 60);
+    const liu = this.add.sprite(w / 2, 70, SPRITE_KEYS.PLAYER_DEAD);
+    liu.setDisplaySize(72, 72);
     liu.setDepth(10);
 
-    addCrispText(this, w / 2, 98, 'GAME OVER', {
-      fontSize: '28px',
+    addCrispText(this, w / 2, 130, '本局结束', {
+      fontSize: '30px',
       fontFamily: FONT_DISPLAY,
       color: hex(COLORS.PRIMARY),
       fontStyle: 'bold',
@@ -130,7 +131,7 @@ export class DeathScene extends Phaser.Scene {
     const pct = displayBest > 0 ? Math.min(data.score / displayBest, 1) : 0;
 
     const scoreCenterX = w / 2;
-    const scoreY = 140;
+    const scoreY = 180;
 
     const scoreCard1 = this.add.graphics();
     scoreCard1.fillStyle(COLORS.PRIMARY, 0.08);
@@ -258,7 +259,19 @@ export class DeathScene extends Phaser.Scene {
       fontStyle: 'bold',
     }).setOrigin(0.5).setDepth(10);
 
-    const btnY = cardsY + cardH + 36;
+    const meanings = (data.meanings || []).filter(Boolean).slice(0, 6);
+    if (meanings.length) {
+      addCrispText(this, w / 2, cardsY + cardH + 32, `释义回顾：${meanings.join(' · ')}`, {
+        fontSize: '11px',
+        fontFamily: FONT_BODY,
+        color: hex(COLORS.TEXT_MUTED),
+        fontStyle: 'bold',
+        wordWrap: { width: w - 80 },
+        align: 'center',
+      }).setOrigin(0.5, 0).setDepth(10);
+    }
+
+    const btnY = cardsY + cardH + (meanings.length ? 70 : 36);
 
     const retryGfx = this.add.graphics();
     retryGfx.fillStyle(COLORS.PRIMARY, 1);
@@ -271,8 +284,8 @@ export class DeathScene extends Phaser.Scene {
     retryGfx.on('pointerout', () => { this.input.setDefaultCursor('default'); });
     retryGfx.on('pointerdown', () => this.retry());
 
-    addCrispText(this, w / 2 - 51, btnY + 17, 'RETRY', {
-      fontSize: '14px',
+    addCrispText(this, w / 2 - 51, btnY + 17, '再来一局', {
+      fontSize: '13px',
       fontFamily: FONT_BODY,
       color: '#FFFFFF',
       fontStyle: 'bold',
@@ -287,14 +300,14 @@ export class DeathScene extends Phaser.Scene {
     menuGfx.on('pointerout', () => { this.input.setDefaultCursor('default'); });
     menuGfx.on('pointerdown', () => this.goToMenu());
 
-    addCrispText(this, w / 2 + 51, btnY + 17, 'MENU', {
+    addCrispText(this, w / 2 + 51, btnY + 17, '菜单', {
       fontSize: '14px',
       fontFamily: FONT_BODY,
       color: hex(COLORS.TEXT_ON_LIGHT),
       fontStyle: 'bold',
     }).setOrigin(0.5).setDepth(10);
 
-    addCrispText(this, w / 2, btnY + 42, 'or press SPACE', {
+    addCrispText(this, w / 2, btnY + 42, '点「再来一局」立即重开', {
       fontSize: '11px',
       fontFamily: FONT_BODY,
       color: hex(COLORS.TEXT_ON_LIGHT),

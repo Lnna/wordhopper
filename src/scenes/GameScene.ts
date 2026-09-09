@@ -1,20 +1,37 @@
 import Phaser from 'phaser';
-import { applyRenderZoom, isMobile, isIOS } from '../config/display';
-import { Difficulty, DIFFICULTY_CONFIG, PLAYER_X, GROUND_Y, CANVAS_WIDTH, CANVAS_HEIGHT, GRAVITY, GROUND_HEIGHT, SPRITE_KEYS } from '../config/constants';
-import { COLORS, FONT_BODY, FONT_TYPING, FONT_DISPLAY } from '../config/colors';
-import { getTranslation } from '../data/translations';
+import { applyRenderZoom } from '../config/display';
+import {
+  CANVAS_WIDTH,
+  CANVAS_HEIGHT,
+  DIFFICULTY_CONFIG,
+  Difficulty,
+  HIT_PROGRESS,
+  INITIAL_APPROACH_RATE,
+  PERFECT_WINDOW_RATIO,
+  PLAYER_X,
+  PLAYER_Y,
+  ROAD_SCROLL_DURATION,
+  ROAD_STRIPE_PERIOD,
+  SPRITE_KEYS,
+  getRoadBox,
+  roadTrapezoid,
+  TUTORIAL_KEY,
+  WIN_HI,
+  WIN_LO,
+} from '../config/constants';
+import { COLORS, FONT_BODY, FONT_DISPLAY } from '../config/colors';
 import { addCrispText } from '../config/text';
-import { darker } from '../config/utils';
+import { hex } from '../config/utils';
 import { Player } from '../entities/Player';
 import { Obstacle } from '../entities/Obstacle';
-import { TypingSystem } from '../systems/TypingSystem';
+import { BubbleTapSystem } from '../systems/BubbleTapSystem';
 import { WordSpawner } from '../systems/WordSpawner';
 import { ScoreSystem } from '../systems/ScoreSystem';
 import { SpeedManager } from '../systems/SpeedManager';
 import { ObstacleSpawner } from '../systems/ObstacleSpawner';
+import { audioSystem } from '../systems/AudioSystem';
 
-const DEBUG_HITBOXES = false;
-const TUTORIAL_KEY = 'word-hopper-tutorial-done';
+const DEBUG_WINDOW = false;
 
 function isTutorialNeeded(): boolean {
   try { return !localStorage.getItem(TUTORIAL_KEY); } catch { return true; }
@@ -24,43 +41,42 @@ function markTutorialDone(): void {
   try { localStorage.setItem(TUTORIAL_KEY, '1'); } catch { /* noop */ }
 }
 
+function inWindow(p: number): boolean {
+  return p >= WIN_LO && p < WIN_HI;
+}
+
+function windowCenter(): number {
+  return (WIN_LO + WIN_HI) / 2;
+}
+
 export class GameScene extends Phaser.Scene {
   private player!: Player;
   private obstacles: Obstacle[] = [];
-  private typingSystem!: TypingSystem;
+  private bubbleTap = new BubbleTapSystem();
   private wordSpawner = new WordSpawner();
   private scoreSystem = new ScoreSystem();
   private speedManager = new SpeedManager();
   private obstacleSpawner!: ObstacleSpawner;
   private difficulty: Difficulty = 'easy';
-  private gameInputHandler: ((e: KeyboardEvent) => void) | null = null;
-  private inputInputHandler: ((e: InputEvent) => void) | null = null;
-  private inputBlurHandler: (() => void) | null = null;
-  private typingLock = false;
-  private wordReady = false;
   private tutorial = false;
   private tutorialStarted = false;
-  private scoreLabel!: Phaser.GameObjects.Text;
   private scoreText!: Phaser.GameObjects.Text;
-  private speedLabel!: Phaser.GameObjects.Text;
   private speedText!: Phaser.GameObjects.Text;
   private comboText!: Phaser.GameObjects.Text;
   private hitLabel!: Phaser.GameObjects.Text;
-  private typedText!: Phaser.GameObjects.Text;
-  private remainingText!: Phaser.GameObjects.Text;
-  private timingLine!: Phaser.GameObjects.Graphics;
-  private flashGfx!: Phaser.GameObjects.Graphics;
-  private flashAlpha = 0;
-  private flashX = 0;
-  private visibilityHandler: (() => void) | null = null;
+  private defText!: Phaser.GameObjects.Text;
+  private hintText!: Phaser.GameObjects.Text;
+  private pauseBtn!: Phaser.GameObjects.Text;
   private debugGfx!: Phaser.GameObjects.Graphics;
-  private groundTiles: Phaser.GameObjects.TileSprite[] = [];
-  private distance = 0;
+  private roadStripes!: Phaser.GameObjects.TileSprite;
+  private roadMaskGfx!: Phaser.GameObjects.Graphics;
+  private visibilityHandler: (() => void) | null = null;
   private elapsedTime = 0;
   private alive = true;
   private tickAccumulator = 0;
-  private pendingClear: { obstacle: Obstacle; targetY: number } | null = null;
-  private typingObstacle: Obstacle | null = null;
+  private pausedByUser = false;
+  private seenMeanings: string[] = [];
+  private ignoreJumpUntil = 0;
 
   constructor() {
     super({ key: 'GameScene' });
@@ -74,258 +90,324 @@ export class GameScene extends Phaser.Scene {
   create(): void {
     applyRenderZoom(this);
     this.alive = true;
-    this.distance = 0;
     this.elapsedTime = 0;
     this.obstacles = [];
-    this.typingObstacle = null;
-    this.wordReady = false;
     this.tutorial = isTutorialNeeded();
     this.tutorialStarted = false;
+    this.pausedByUser = false;
+    this.seenMeanings = [];
     this.scoreSystem.reset();
     this.speedManager.reset();
     this.speedManager.setBaseMultiplier(DIFFICULTY_CONFIG[this.difficulty].speedMultiplier);
-    this.typingSystem = new TypingSystem();
-    this.obstacleSpawner = new ObstacleSpawner(this.wordSpawner, this.speedManager);
+    this.bubbleTap.clear();
+    this.obstacleSpawner = new ObstacleSpawner(this.wordSpawner);
     this.obstacleSpawner.setDifficulty(this.difficulty);
 
-    this.physics.world.setBounds(0, 0, CANVAS_WIDTH, GROUND_Y);
-
-    this.add.image(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, SPRITE_KEYS.BG_SKY)
-      .setDisplaySize(CANVAS_WIDTH, CANVAS_HEIGHT).setDepth(0);
-
-    const cloudGfx = this.add.graphics();
-    for (let i = 0; i < 6; i++) {
-      const cx = 60 + i * 140;
-      const cy = 30 + Math.random() * 50;
-      const cw = 40 + Math.random() * 30;
-      cloudGfx.fillStyle(0xFFFFFF, 0.5);
-      cloudGfx.fillEllipse(cx, cy, cw, cw * 0.5);
-      cloudGfx.fillEllipse(cx + cw * 0.3, cy - 5, cw * 0.7, cw * 0.4);
-      cloudGfx.fillEllipse(cx - cw * 0.3, cy - 3, cw * 0.6, cw * 0.35);
-    }
-    cloudGfx.setDepth(1);
-
-    this.groundTiles = [];
-    for (let x = -100; x < CANVAS_WIDTH + 200; x += CANVAS_WIDTH) {
-      const tile = this.add.tileSprite(x, GROUND_Y, CANVAS_WIDTH, GROUND_HEIGHT, SPRITE_KEYS.BG_GROUND)
-        .setOrigin(0, 0).setDepth(3);
-      this.groundTiles.push(tile);
-    }
-
+    this.drawWorld();
     this.player = new Player(this);
+    this.buildHUD();
 
-    this.timingLine = this.add.graphics();
-    this.timingLine.setDepth(5);
+    this.events.on('obstacle-bubble-tap', this.onBubbleTap, this);
+    this.input.on('pointerdown', this.onPointerJump, this);
+    this.input.topOnly = false;
 
-    this.flashGfx = this.add.graphics();
-    this.flashGfx.setDepth(6);
-
-    if (DEBUG_HITBOXES) {
-      this.debugGfx = this.add.graphics();
-      this.debugGfx.setDepth(25);
-    }
-
-    const hudX = CANVAS_WIDTH - 154;
-    const hudGfx = this.add.graphics();
-    hudGfx.fillStyle(COLORS.PRIMARY, 0.85);
-    hudGfx.fillRoundedRect(hudX, 6, 148, 42, 16);
-    hudGfx.fillStyle(darker(COLORS.PRIMARY, 0.2), 0.3);
-    hudGfx.fillRoundedRect(hudX, 26, 148, 20, 10);
-    hudGfx.setDepth(20);
-
-    this.scoreLabel = addCrispText(this, hudX + 8, 12, 'SCORE', {
-      fontSize: '13px',
-      color: '#FFFFFF',
-      fontFamily: FONT_BODY,
-      fontStyle: 'bold',
-    }).setDepth(20);
-
-    this.scoreText = addCrispText(this, hudX + 140, 12, '0', {
-      fontSize: '13px',
-      color: '#FFFFFF',
-      fontFamily: FONT_BODY,
-      fontStyle: 'bold',
-    }).setOrigin(1, 0).setDepth(20);
-
-    this.speedLabel = addCrispText(this, hudX + 8, 30, 'SPEED', {
-      fontSize: '12px',
-      color: '#D1FAE5',
-      fontFamily: FONT_BODY,
-      fontStyle: 'normal',
-    }).setDepth(20);
-
-    this.speedText = addCrispText(this, hudX + 140, 30, '1.0x', {
-      fontSize: '12px',
-      color: '#D1FAE5',
-      fontFamily: FONT_BODY,
-      fontStyle: 'normal',
-    }).setOrigin(1, 0).setDepth(20);
-
-    this.comboText = addCrispText(this, CANVAS_WIDTH / 2, 28, '', {
-      fontSize: '28px',
-      color: '#15803D',
-      fontFamily: FONT_DISPLAY,
-      fontStyle: 'bold',
-      padding: { right: 8, left: 2, top: 2, bottom: 2 },
-      stroke: '#FFFFFF',
-      strokeThickness: 4,
-    }).setOrigin(0.5).setDepth(20);
-
-    this.hitLabel = addCrispText(this, PLAYER_X, 0, '', {
-      fontSize: '20px',
-      color: '#34D399',
-      fontFamily: FONT_DISPLAY,
-      fontStyle: 'bold',
-      padding: { right: 8, left: 2, top: 2, bottom: 2 },
-    }).setOrigin(0.5).setDepth(20).setAlpha(0);
-
-    const typingGfx = this.add.graphics();
-    typingGfx.fillStyle(COLORS.PRIMARY, 0.85);
-    typingGfx.fillRoundedRect(CANVAS_WIDTH / 2 - 120, CANVAS_HEIGHT - 22, 240, 28, 14);
-    typingGfx.setDepth(20);
-
-    this.typedText = addCrispText(this, CANVAS_WIDTH / 2, CANVAS_HEIGHT - 14, '', {
-      fontSize: '16px',
-      color: '#4ade80',
-      fontFamily: FONT_TYPING,
-      fontStyle: 'bold',
-    }).setOrigin(1, 0.5).setDepth(20);
-
-    this.remainingText = addCrispText(this, CANVAS_WIDTH / 2, CANVAS_HEIGHT - 14, '', {
-      fontSize: '16px',
-      color: '#FFFFFF',
-      fontFamily: FONT_TYPING,
-      fontStyle: 'bold',
-    }).setOrigin(0, 0.5).setDepth(20);
-
-    const gameInput = document.getElementById('game-input') as HTMLInputElement;
-    if (gameInput) {
-      gameInput.value = '';
-      gameInput.focus();
-      this.gameInputHandler = (e: KeyboardEvent) => {
-        if (!this.alive) return;
-        if (this.typingLock) return;
-        if (e.key === ' ') {
-          e.preventDefault();
-          e.stopPropagation();
-          if (this.wordReady) { this.submitWord(); return; }
-          if (this.typingSystem.getProgress().selectedWord) {
-            this.handleTyping(' ');
-          }
-          return;
-        }
-        if (e.key.length !== 1) return;
-        e.preventDefault();
-        e.stopPropagation();
-        this.typingLock = true;
-        try { this.handleTyping(e.key); } finally {
-          gameInput.value = '';
-          requestAnimationFrame(() => { this.typingLock = false; });
-        }
-      };
-      gameInput.addEventListener('keydown', this.gameInputHandler);
-
-      this.inputInputHandler = (e: InputEvent) => {
-        if (!this.alive) return;
-        if (this.typingLock) return;
-        const ch = e.data;
-        if (!ch || ch.length !== 1) return;
-        if (ch === ' ') {
-          if (this.wordReady) { this.submitWord(); gameInput.value = ''; return; }
-          if (this.typingSystem.getProgress().selectedWord) {
-            this.handleTyping(' ');
-          }
-          gameInput.value = '';
-          return;
-        }
-        this.typingLock = true;
-        try { this.handleTyping(ch); } finally {
-          gameInput.value = '';
-          requestAnimationFrame(() => { this.typingLock = false; });
-        }
-      };
-      gameInput.addEventListener('input', this.inputInputHandler as EventListener);
-
-      this.inputBlurHandler = () => { if (this.alive && !isIOS()) gameInput.focus(); };
-      gameInput.addEventListener('blur', this.inputBlurHandler);
-    }
-
-    this.spawnObstacle();
+    this.spawnObstacle(true);
+    this.refreshDefinition();
 
     this.visibilityHandler = () => {
       if (document.hidden && this.alive) {
         this.scene.pause();
-      } else if (!document.hidden) {
+      } else if (!document.hidden && !this.pausedByUser) {
         this.scene.resume();
       }
     };
     document.addEventListener('visibilitychange', this.visibilityHandler);
 
-    if (isMobile()) {
-      window.__wordhopper_jump = () => {
-        if (!this.alive) return;
-        if (this.wordReady) { this.submitWord(); return; }
-        if (this.typingSystem.getProgress().selectedWord) {
-          this.handleTyping(' ');
-        }
-      };
-      window.__wordhopper_key = (key: string) => {
-        if (!this.alive) return;
-        if (this.typingLock) return;
-        if (key === ' ') {
-          if (this.wordReady) { this.submitWord(); return; }
-          if (this.typingSystem.getProgress().selectedWord) {
-            this.handleTyping(' ');
-          }
-          return;
-        }
-        this.typingLock = true;
-        try { this.handleTyping(key); } finally {
-          requestAnimationFrame(() => { this.typingLock = false; });
-        }
-      };
+    if (this.tutorial) {
+      this.hintText.setText('按序点字母泡，拼完后在贴身时机点空白处起跳');
     }
   }
 
-  update(_time: number, delta: number): void {
-    if (!this.alive) return;
-    const dt = delta / 1000;
-    const speed = this.tutorialShouldPause() ? 0 : this.speedManager.getSpeed();
+  private drawWorld(): void {
+    this.add.image(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, SPRITE_KEYS.BG_SKY)
+      .setDisplaySize(CANVAS_WIDTH, CANVAS_HEIGHT).setDepth(0);
 
-    this.distance += speed * dt;
-    if (speed > 0) this.elapsedTime += dt;
-    for (const tile of this.groundTiles) {
-      tile.tilePositionX += speed * dt;
+    const cloudGfx = this.add.graphics().setDepth(1);
+    cloudGfx.fillStyle(0xffffff, 0.8);
+    cloudGfx.fillEllipse(70, 64, 64, 20);
+    cloudGfx.fillEllipse(96, 52, 30, 26);
+    cloudGfx.fillEllipse(120, 60, 32, 20);
+    cloudGfx.fillEllipse(320, 128, 80, 22);
+    cloudGfx.fillEllipse(350, 114, 34, 30);
+    cloudGfx.fillEllipse(378, 124, 36, 22);
+
+    const { boxH } = getRoadBox();
+    const borderPts = roadTrapezoid(0.16, 0.84, 0.60, 0.40);
+    const roadPts = roadTrapezoid(0.18, 0.82, 0.58, 0.42);
+
+    const border = this.add.graphics().setDepth(2);
+    this.fillTrapezoid(border, borderPts, 0x166534, 0.45);
+
+    this.roadStripes = this.add.tileSprite(
+      CANVAS_WIDTH / 2, CANVAS_HEIGHT - boxH / 2,
+      CANVAS_WIDTH, boxH,
+      SPRITE_KEYS.BG_ROAD_STRIPES
+    ).setDepth(3).setAlpha(0.75);
+
+    this.roadMaskGfx = this.add.graphics().setVisible(false);
+    this.fillTrapezoid(this.roadMaskGfx, roadPts, 0xffffff, 1);
+    this.roadStripes.setMask(this.roadMaskGfx.createGeometryMask());
+
+    const ground = this.add.graphics().setDepth(4);
+    for (let i = 0; i < 36; i++) {
+      const a = (i / 36) * 0.85;
+      ground.fillStyle(0x15803d, a);
+      ground.fillRect(0, CANVAS_HEIGHT - 36 + i, CANVAS_WIDTH, 1);
     }
 
-    this.player.update(0);
+    if (DEBUG_WINDOW) {
+      this.debugGfx = this.add.graphics().setDepth(6);
+      const y0 = (0.18 + WIN_LO * (0.58 - 0.18)) * CANVAS_HEIGHT;
+      const y1 = (0.18 + WIN_HI * (0.58 - 0.18)) * CANVAS_HEIGHT;
+      this.debugGfx.lineStyle(2, 0x22c55e, 0.7);
+      this.debugGfx.strokeRect(CANVAS_WIDTH * 0.18, y0, CANVAS_WIDTH * 0.64, y1 - y0);
+    }
+  }
 
-    if (speed > 0) {
+  private fillTrapezoid(
+    g: Phaser.GameObjects.Graphics,
+    pts: { x: number; y: number }[],
+    color: number,
+    alpha: number,
+  ): void {
+    g.fillStyle(color, alpha);
+    g.beginPath();
+    g.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
+    g.closePath();
+    g.fillPath();
+  }
+
+  private buildHUD(): void {
+    const hudGfx = this.add.graphics().setDepth(20);
+    hudGfx.fillStyle(COLORS.PRIMARY, 0.9);
+    hudGfx.fillRoundedRect(10, 10, 150, 50, 14);
+
+    addCrispText(this, 24, 22, 'SCORE', {
+      fontSize: '12px', color: '#FFFFFF', fontFamily: FONT_BODY, fontStyle: 'bold',
+    }).setDepth(20);
+    this.scoreText = addCrispText(this, 150, 22, '0', {
+      fontSize: '12px', color: '#FFFFFF', fontFamily: FONT_BODY, fontStyle: 'bold',
+    }).setOrigin(1, 0).setDepth(20);
+
+    addCrispText(this, 24, 40, 'SPEED', {
+      fontSize: '11px', color: '#D1FAE5', fontFamily: FONT_BODY,
+    }).setDepth(20);
+    this.speedText = addCrispText(this, 150, 40, '1.0x', {
+      fontSize: '11px', color: '#D1FAE5', fontFamily: FONT_BODY,
+    }).setOrigin(1, 0).setDepth(20);
+
+    this.pauseBtn = addCrispText(this, CANVAS_WIDTH - 28, 28, '⏸', {
+      fontSize: '13px', color: '#FFFFFF', fontFamily: FONT_BODY,
+    }).setOrigin(0.5).setDepth(21).setInteractive({ useHandCursor: true });
+
+    const pauseBg = this.add.graphics().setDepth(20);
+    pauseBg.fillStyle(COLORS.PRIMARY, 0.9);
+    pauseBg.fillCircle(CANVAS_WIDTH - 28, 28, 17);
+    this.pauseBtn.on('pointerdown', (p: Phaser.Input.Pointer) => {
+      p.event?.stopPropagation?.();
+      this.togglePause();
+    });
+
+    this.comboText = addCrispText(this, CANVAS_WIDTH / 2, 72, '', {
+      fontSize: '26px',
+      color: '#15803D',
+      fontFamily: FONT_DISPLAY,
+      fontStyle: 'bold',
+      stroke: '#FFFFFF',
+      strokeThickness: 4,
+    }).setOrigin(0.5).setDepth(20);
+
+    this.hitLabel = addCrispText(this, PLAYER_X, PLAYER_Y - 100, '', {
+      fontSize: '22px',
+      color: '#34D399',
+      fontFamily: FONT_DISPLAY,
+      fontStyle: 'bold',
+    }).setOrigin(0.5).setDepth(20).setAlpha(0);
+
+    this.defText = addCrispText(this, CANVAS_WIDTH / 2, CANVAS_HEIGHT - 14, '', {
+      fontSize: '12px',
+      color: hex(0x14532d),
+      fontFamily: FONT_BODY,
+      fontStyle: 'bold',
+      backgroundColor: '#FFFDF5f0',
+      padding: { left: 12, right: 12, top: 5, bottom: 5 },
+    }).setOrigin(0.5, 1).setDepth(18);
+    this.defText.setData('prefix', '释义 ');
+
+    this.hintText = addCrispText(this, CANVAS_WIDTH / 2, 110, '', {
+      fontSize: '13px',
+      color: hex(COLORS.ACCENT_DARK),
+      fontFamily: FONT_BODY,
+      fontStyle: 'bold',
+      wordWrap: { width: CANVAS_WIDTH - 40 },
+      align: 'center',
+    }).setOrigin(0.5, 0).setDepth(20);
+  }
+
+  update(_time: number, delta: number): void {
+    if (!this.alive || this.pausedByUser) return;
+    const dt = delta / 1000;
+    const rate = this.tutorialShouldPause() ? 0 : this.speedManager.getSpeed();
+
+    if (rate > 0) this.elapsedTime += dt;
+    this.player.update();
+
+    if (rate > 0) {
       this.tickAccumulator += dt;
       if (this.tickAccumulator >= 0.1) {
         this.scoreSystem.addTick();
         this.tickAccumulator -= 0.1;
       }
-    } else {
-      this.tickAccumulator = 0;
     }
 
-    for (const obstacle of this.obstacles) obstacle.update(dt, speed);
-    this.checkPendingClear();
+    for (const obs of this.obstacles) obs.advance(dt, rate);
+    if (rate > 0) {
+      const speedMul = rate / INITIAL_APPROACH_RATE;
+      this.roadStripes.tilePositionY += (ROAD_STRIPE_PERIOD / ROAD_SCROLL_DURATION) * speedMul * dt;
+    }
     this.checkCollisions();
-    this.updateTimingLine(this.speedManager.getSpeed());
     this.cleanupObstacles();
     this.checkSpawn();
+    this.refreshDefinition();
     this.updateHUD();
-    if (DEBUG_HITBOXES) this.drawDebug();
-    this.updateFlash(dt);
+    this.syncTargetWord();
+  }
+
+  private syncTargetWord(): void {
+    const target = this.getTargetObstacle();
+    if (!target || target.isJumpReady()) return;
+    const word = target.getWord().toLowerCase();
+    if (!this.bubbleTap.hasWord() || this.bubbleTap.getWord() !== word) {
+      this.bubbleTap.setWord(word);
+    }
+  }
+
+  private tutorialShouldPause(): boolean {
+    if (!this.tutorial) return false;
+    if (!this.tutorialStarted) return true;
+    const target = this.getTargetObstacle();
+    if (!target) return true;
+    if (!target.isJumpReady()) return false;
+    return Math.abs(target.getProgress() - windowCenter()) < 0.012;
+  }
+
+  private getTargetObstacle(): Obstacle | null {
+    const alive = this.obstacles.filter((o) => o.isActive() && !o.isClearing());
+    if (!alive.length) return null;
+    alive.sort((a, b) => b.getProgress() - a.getProgress());
+    return alive[0];
+  }
+
+  private onBubbleTap(obstacle: Obstacle, index: number): void {
+    if (!this.alive || this.pausedByUser) return;
+    this.ignoreJumpUntil = this.time.now + 80;
+    const target = this.getTargetObstacle();
+    if (!target || obstacle !== target) return;
+    if (obstacle.isJumpReady()) return;
+
+    if (!this.bubbleTap.hasWord() || this.bubbleTap.getWord() !== obstacle.getWord().toLowerCase()) {
+      this.bubbleTap.setWord(obstacle.getWord());
+    }
+
+    const result = this.bubbleTap.tapIndex(index);
+    if (result.wrong) {
+      this.scoreSystem.breakCombo();
+      this.comboText.setText('');
+      obstacle.flashWrong(index);
+      audioSystem.play('wrong');
+      return;
+    }
+
+    if (this.tutorial && !this.tutorialStarted) this.tutorialStarted = true;
+
+    obstacle.onCorrectTap(index);
+    audioSystem.play('correct');
+
+    if (result.completed) {
+      obstacle.markComplete();
+      audioSystem.play('complete');
+      this.hintText.setText(this.tutorial ? '时机到了点空白处起跳' : '');
+    }
+  }
+
+  private onPointerJump(pointer: Phaser.Input.Pointer): void {
+    if (!this.alive || this.pausedByUser || this.player.isBusy()) return;
+    if (this.time.now < this.ignoreJumpUntil) return;
+    if (pointer.y < 56 && pointer.x > CANVAS_WIDTH - 56) return;
+
+    const target = this.getTargetObstacle();
+    if (!target) return;
+
+    if (!target.isJumpReady()) {
+      this.player.emptyHop();
+      return;
+    }
+
+    const p = target.getProgress();
+    if (inWindow(p)) {
+      const center = windowCenter();
+      const half = (WIN_HI - WIN_LO) / 2;
+      const perfect = Math.abs(p - center) <= half * PERFECT_WINDOW_RATIO;
+      this.performClear(target, perfect);
+    } else {
+      this.player.emptyHop();
+      this.hintText.setText('窗外空蹦 · 还可再跳');
+      this.time.delayedCall(900, () => {
+        if (this.hintText.active && !this.tutorial) this.hintText.setText('');
+      });
+    }
+  }
+
+  private performClear(obstacle: Obstacle, perfect: boolean): void {
+    const word = obstacle.getWord();
+    this.player.clearJump(
+      () => {
+        obstacle.beginClear(() => {
+          this.obstacles = this.obstacles.filter((o) => o !== obstacle);
+        });
+      },
+      () => {
+        /* landed */
+      }
+    );
+
+    this.scoreSystem.addWordBonus(word, this.speedManager.getSpeedMultiplier(), perfect);
+    this.speedManager.onObstacleCleared();
+    this.wordSpawner.onObstacleCleared();
+    this.bubbleTap.clear();
+    audioSystem.play(perfect ? 'combo' : 'clear');
+    this.updateComboDisplay(perfect);
+    this.hintText.setText('');
+
+    if (this.tutorial) {
+      this.tutorial = false;
+      markTutorialDone();
+    }
   }
 
   private checkCollisions(): void {
-    const pr = this.player.getHitbox();
     for (const obs of this.obstacles) {
-      for (const rect of obs.getRects()) {
-        if (Phaser.Geom.Intersects.RectangleToRectangle(pr, rect)) {
+      if (!obs.isActive() || obs.isClearing()) continue;
+      if (obs.getProgress() >= HIT_PROGRESS) {
+        if (!this.player.isBusy()) {
+          this.die();
+          return;
+        }
+      }
+      if (obs.getProgress() >= WIN_HI) {
+        const pr = this.player.getHitbox();
+        if (Phaser.Geom.Intersects.RectangleToRectangle(pr, obs.getHitbox()) && !this.player.isBusy()) {
           this.die();
           return;
         }
@@ -333,197 +415,90 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private drawDebug(): void {
-    this.debugGfx.clear();
-
-    const pr = this.player.getHitbox();
-    this.debugGfx.lineStyle(2, 0x00ff00, 0.9);
-    this.debugGfx.strokeRect(pr.x, pr.y, pr.width, pr.height);
-
-    for (const obs of this.obstacles) {
-      for (const rect of obs.getRects()) {
-        this.debugGfx.lineStyle(2, 0xff0000, 0.8);
-        this.debugGfx.strokeRect(rect.x, rect.y, rect.width, rect.height);
-      }
-    }
-  }
-
-  private updateFlash(dt: number): void {
-    if (this.flashAlpha <= 0) return;
-    this.flashAlpha = Math.max(0, this.flashAlpha - dt * 2);
-    this.flashGfx.clear();
-    if (this.flashAlpha <= 0) return;
-
-    const halfW = 20;
-    this.flashGfx.fillStyle(COLORS.PRIMARY_LIGHT, this.flashAlpha);
-    this.flashGfx.fillRect(this.flashX - halfW, 0, halfW * 2, GROUND_Y);
-    this.flashGfx.fillStyle(COLORS.PRIMARY_LIGHT, this.flashAlpha * 0.3);
-    this.flashGfx.fillRect(this.flashX - halfW * 2, 0, halfW * 4, GROUND_Y);
-  }
-
-  private triggerFlash(idealX: number, distance: number, windowHalf: number): void {
-    const maxDist = windowHalf;
-    const normalized = Math.max(0, 1 - distance / maxDist);
-    this.flashAlpha = 0.15 + normalized * 0.75;
-    this.flashX = idealX;
-  }
-
-  private handleTyping(key: string): void {
-    if (this.wordReady) return;
-    const result = this.typingSystem.onKeyPress(key);
-    if (result.wrong) {
-      this.scoreSystem.breakCombo();
-      this.comboText.setText('');
-      const obs = this.typingObstacle;
-      if (obs && result.selectedWord) {
-        const wordIdx = obs.getConfig().word1 === result.selectedWord ? 1 : 2;
-        obs.flashWrong(wordIdx);
-        this.time.delayedCall(50, () => {
-          obs.highlightWord(wordIdx, this.typingSystem.getCharIndex());
-        });
-      } else if (obs) {
-        obs.flashWrong(1);
-        this.time.delayedCall(50, () => {
-          obs.resetWordDisplay();
-        });
-      }
-      this.updateTypingIndicator();
-      return;
-    }
-
-    if (this.tutorial && !this.tutorialStarted) {
-      this.tutorialStarted = true;
-    }
-
-    const obs = this.typingObstacle;
-    if (!obs) return;
-
-    const config = obs.getConfig();
-    const wordIdx = config.word1 === result.selectedWord ? 1 : 2;
-    obs.highlightWord(wordIdx, result.charIndex);
-    if (result.charIndex === 1) obs.fadeUnselected(wordIdx);
-
-    if (result.completed) {
-      this.wordReady = true;
-    }
-    this.updateTypingIndicator();
-  }
-
-  private submitWord(): void {
-    if (!this.wordReady) return;
-    this.wordReady = false;
-
-    const gameInput = document.getElementById('game-input') as HTMLInputElement;
-    if (gameInput) gameInput.value = '';
-
-    const progress = this.typingSystem.getProgress();
-    const obs = this.typingObstacle;
-    if (!obs || !progress.selectedWord) return;
-
-    const config = obs.getConfig();
-    const wordIdx = config.word1 === progress.selectedWord ? 1 : 2;
-    const targetY = wordIdx === 1 ? config.word1Y : config.word2Y;
-
-    let perfect = false;
-    const jumpHeight = GROUND_Y - targetY;
-    if (jumpHeight > 0) {
-      const speed = this.speedManager.getSpeed();
-      const apexTime = Math.sqrt(2 * jumpHeight / GRAVITY);
-      const idealX = obs.getX() - speed * apexTime;
-      const windowHalf = Math.max(30, speed * 0.18);
-      const dist = Math.abs(PLAYER_X - idealX);
-      perfect = dist < windowHalf * 0.3;
-      this.triggerFlash(idealX, dist, windowHalf);
-    }
-
-    this.player.jumpToWord(targetY);
-    this.scoreSystem.addWordBonus(progress.selectedWord, this.speedManager.getSpeedMultiplier(), perfect);
-    this.speedManager.onObstacleCleared();
-    this.wordSpawner.onObstacleCleared();
-    this.pendingClear = { obstacle: obs, targetY };
-    this.typedText.setText('');
-    this.remainingText.setText('');
-    this.updateComboDisplay(perfect, targetY);
-    if (this.tutorial) {
-      this.tutorial = false;
-      markTutorialDone();
-    }
-    this.spawnObstacle();
-  }
-
-  private tutorialShouldPause(): boolean {
-    if (!this.tutorial) return false;
-    if (!this.tutorialStarted) return true;
-    if (!this.wordReady) return false;
-    const obs = this.typingObstacle;
-    if (!obs) return true;
-    const config = obs.getConfig();
-    const targetY = this.typingSystem.getProgress().selectedWord
-      ? (config.word1 === this.typingSystem.getProgress().selectedWord ? config.word1Y : config.word2Y)
-      : config.word1Y;
-    const jumpHeight = GROUND_Y - targetY;
-    if (jumpHeight <= 0) return false;
-    const speed = this.speedManager.getSpeed();
-    const apexTime = Math.sqrt(2 * jumpHeight / GRAVITY);
-    const idealX = obs.getX() - speed * apexTime;
-    return Math.abs(idealX - PLAYER_X) < 3;
-  }
-
-  private updateTypingIndicator(): void {
-    const progress = this.typingSystem.getProgress();
-    if (!progress.selectedWord) {
-      if (this.tutorial && !this.tutorialStarted) {
-        this.typedText.setText('').setOrigin(1, 0.5);
-        this.remainingText.setText('Type a word on the obstacle').setOrigin(0.5, 0.5).setX(CANVAS_WIDTH / 2).setColor('#A7F3D0');
-        return;
-      }
-      this.typedText.setText('');
-      this.remainingText.setText('');
-      return;
-    }
-    const typed = progress.selectedWord.substring(0, progress.correctChars);
-    const remaining = progress.selectedWord.substring(progress.correctChars);
-    if (this.wordReady) {
-      const zh = getTranslation(progress.selectedWord);
-      const display = zh ? `${typed} ${zh}` : typed;
-      this.typedText.setText(display).setOrigin(1, 0.5).setX(CANVAS_WIDTH / 2);
-      this.remainingText.setText(' → SPACE at green line').setOrigin(0, 0.5).setX(CANVAS_WIDTH / 2).setColor('#FDE68A');
-    } else {
-      this.typedText.setText(typed).setOrigin(1, 0.5).setX(CANVAS_WIDTH / 2);
-      this.remainingText.setText(`|${remaining}`).setOrigin(0, 0.5).setX(CANVAS_WIDTH / 2).setColor('#FFFFFF');
-    }
-  }
-
-  private spawnObstacle(): void {
-    const speed = this.speedManager.getSpeed();
-    const isFirstSpawn = this.tutorial && !this.tutorialStarted;
-    const config = this.obstacleSpawner.generate(speed, isFirstSpawn);
-    const obstacle = new Obstacle(this, config, speed);
+  private spawnObstacle(isFirst = false): void {
+    const config = this.obstacleSpawner.generate(isFirst && this.tutorial);
+    const obstacle = new Obstacle(this, config);
     this.obstacles.push(obstacle);
-    this.typingObstacle = obstacle;
-
-    if (config.word2) {
-      this.typingSystem.setWords(config.word1, config.word2);
-    } else {
-      this.typingSystem.setSingleWord(config.word1);
+    if (!this.bubbleTap.hasWord()) {
+      this.bubbleTap.setWord(config.word);
     }
-
-    if (isFirstSpawn) this.updateTypingIndicator();
   }
 
-  private getNearestObstacle(): Obstacle | null {
-    const upcoming = this.obstacles.filter(o => o.isActive() && o.getX() > PLAYER_X - 10);
-    if (upcoming.length === 0) return null;
-    upcoming.sort((a, b) => a.getX() - b.getX());
-    return upcoming[0];
+  private checkSpawn(): void {
+    if (this.obstacleSpawner.canSpawn(this.obstacles)) {
+      this.spawnObstacle(false);
+    }
+  }
+
+  private cleanupObstacles(): void {
+    this.obstacles = this.obstacles.filter((o) => {
+      if (!o.isActive()) {
+        o.destroy();
+        return false;
+      }
+      return true;
+    });
+  }
+
+  private refreshDefinition(): void {
+    const target = this.getTargetObstacle();
+    if (!target) {
+      this.defText.setText('');
+      return;
+    }
+    const meaning = target.getMeaning();
+    this.defText.setText(`释义 ${meaning}`);
+    if (meaning && !this.seenMeanings.includes(meaning)) {
+      this.seenMeanings.push(meaning);
+    }
+  }
+
+  private updateHUD(): void {
+    this.scoreText.setText(this.scoreSystem.getScore().toLocaleString());
+    this.speedText.setText(`${this.speedManager.getSpeedMultiplier().toFixed(1)}x`);
+  }
+
+  private updateComboDisplay(perfect: boolean): void {
+    const combo = this.scoreSystem.getCombo();
+    this.comboText.setText(`x${combo} COMBO`);
+    this.comboText.setColor(combo >= 5 ? '#B45309' : '#15803D');
+    this.tweens.killTweensOf(this.comboText);
+    this.comboText.setScale(1.35);
+    this.tweens.add({ targets: this.comboText, scaleX: 1, scaleY: 1, duration: 200, ease: 'Back.easeOut' });
+
+    this.hitLabel.setText(perfect ? 'PERFECT!' : 'GOOD');
+    this.hitLabel.setPosition(PLAYER_X, PLAYER_Y - 130);
+    this.hitLabel.setColor(perfect ? '#FCD34D' : '#34D399');
+    this.hitLabel.setAlpha(1);
+    this.tweens.killTweensOf(this.hitLabel);
+    this.tweens.add({
+      targets: this.hitLabel,
+      y: PLAYER_Y - 170,
+      alpha: 0,
+      duration: 1100,
+      ease: 'Cubic.easeOut',
+    });
+  }
+
+  private togglePause(): void {
+    if (!this.alive) return;
+    this.pausedByUser = !this.pausedByUser;
+    if (this.pausedByUser) {
+      this.pauseBtn.setText('▶');
+      this.hintText.setText('已暂停 · 再点继续');
+    } else {
+      this.pauseBtn.setText('⏸');
+      this.hintText.setText('');
+    }
   }
 
   private die(): void {
+    if (!this.alive) return;
     this.alive = false;
     this.scoreSystem.breakCombo();
     this.comboText.setText('');
     this.player.die();
-    this.cleanupDOMListeners();
+    audioSystem.play('die');
     this.time.delayedCall(500, () => {
       this.scene.start('DeathScene', {
         score: this.scoreSystem.getScore(),
@@ -532,160 +507,17 @@ export class GameScene extends Phaser.Scene {
         bestWord: this.scoreSystem.getBestWord(),
         maxCombo: this.scoreSystem.getMaxCombo(),
         difficulty: this.difficulty,
+        meanings: this.seenMeanings.slice(0, 8),
       });
     });
   }
 
-  private cleanupObstacles(): void {
-    this.obstacles = this.obstacles.filter(o => {
-      if (!o.isActive()) {
-        if (o === this.typingObstacle) this.typingObstacle = null;
-        o.destroy();
-        return false;
-      }
-      return true;
-    });
-  }
-
-  private checkSpawn(): void {
-    if (this.typingSystem.hasWords()) {
-      const obs = this.typingObstacle;
-      if (!obs || !this.obstacles.includes(obs) || obs.getX() < PLAYER_X - 10) {
-        this.typingSystem.clear();
-        this.typingObstacle = null;
-        this.wordReady = false;
-      }
-      if (this.typingSystem.hasWords()) return;
-    }
-    const rightEdge = Math.max(...this.obstacles.map(o => o.getX()), 0);
-    if (this.obstacleSpawner.canSpawn(rightEdge)) this.spawnObstacle();
-  }
-
-  private updateHUD(): void {
-    this.scoreText.setText(this.scoreSystem.getScore().toLocaleString());
-    this.speedText.setText(`${this.speedManager.getSpeedMultiplier().toFixed(1)}x`);
-  }
-
-  private updateComboDisplay(perfect: boolean, apexY: number): void {
-    const combo = this.scoreSystem.getCombo();
-
-    this.comboText.setText(`x${combo} COMBO`);
-    this.comboText.setColor(combo >= 5 ? '#B45309' : '#15803D');
-    this.comboText.setStroke(combo >= 5 ? '#FEF3C7' : '#FFFFFF', 4);
-    this.comboText.setFontSize(combo >= 5 ? '32px' : '28px');
-
-    this.tweens.killTweensOf(this.comboText);
-    this.comboText.setScale(1.4);
-    this.tweens.add({
-      targets: this.comboText,
-      scaleX: 1,
-      scaleY: 1,
-      duration: 200,
-      ease: 'Back.easeOut',
-    });
-
-    if (combo >= 5) {
-      this.cameras.main.shake(80, 0.003);
-    }
-
-    this.showHitLabel(perfect, apexY);
-  }
-
-  private showHitLabel(perfect: boolean, apexY: number): void {
-    const labelY = apexY - 12;
-
-    this.hitLabel.setText(perfect ? 'PERFECT!' : 'GOOD');
-    this.hitLabel.setPosition(PLAYER_X, labelY);
-    this.hitLabel.setColor(perfect ? '#FCD34D' : '#34D399');
-    this.hitLabel.setAlpha(1);
-
-    this.tweens.killTweensOf(this.hitLabel);
-    this.tweens.add({
-      targets: this.hitLabel,
-      y: labelY - 40,
-      alpha: 0,
-      duration: 1200,
-      ease: 'Cubic.easeOut',
-    });
-  }
-
-  private updateTimingLine(speed: number): void {
-    this.timingLine.clear();
-    const obs = this.typingObstacle;
-    if (!obs) return;
-
-    const config = obs.getConfig();
-    const targetY = this.typingSystem.getProgress().selectedWord
-      ? (config.word1 === this.typingSystem.getProgress().selectedWord ? config.word1Y : config.word2Y)
-      : config.word1Y;
-
-    const jumpHeight = GROUND_Y - targetY;
-    if (jumpHeight <= 0) return;
-
-    const apexTime = Math.sqrt(2 * jumpHeight / GRAVITY);
-    const idealX = obs.getX() - speed * apexTime;
-    if (idealX < PLAYER_X - 20 || idealX > CANVAS_WIDTH + 50) return;
-
-    const windowHalf = Math.max(30, speed * 0.18);
-    const left = Math.max(PLAYER_X, idealX - windowHalf);
-    const right = Math.min(CANVAS_WIDTH, idealX + windowHalf);
-
-    const green = COLORS.PRIMARY_LIGHT;
-    const breath = this.wordReady
-      ? 0.4 + 0.6 * (0.5 + 0.5 * Math.sin((this.time.now / 800) * Math.PI))
-      : 0.8;
-    const lineWidth = this.wordReady ? 5 : 3;
-
-    this.timingLine.lineStyle(1, green, 0.3);
-    const dashLen = 6;
-    const gapLen = 4;
-    for (let y = 0; y < GROUND_Y; y += dashLen + gapLen) {
-      this.timingLine.lineBetween(left, y, left, Math.min(y + dashLen, GROUND_Y));
-      this.timingLine.lineBetween(right, y, right, Math.min(y + dashLen, GROUND_Y));
-    }
-
-    this.timingLine.lineStyle(lineWidth, green, breath);
-    this.timingLine.lineBetween(idealX, 0, idealX, GROUND_Y);
-
-    this.timingLine.fillStyle(green, 0.04);
-    this.timingLine.fillRect(left, 0, right - left, GROUND_Y);
-  }
-
   shutdown(): void {
-    this.cleanupDOMListeners();
+    this.events.off('obstacle-bubble-tap', this.onBubbleTap, this);
+    this.input.off('pointerdown', this.onPointerJump, this);
     if (this.visibilityHandler) {
       document.removeEventListener('visibilitychange', this.visibilityHandler);
       this.visibilityHandler = null;
-    }
-  }
-
-  private cleanupDOMListeners(): void {
-    const gameInput = document.getElementById('game-input') as HTMLInputElement;
-    if (gameInput) {
-      if (this.gameInputHandler) {
-        gameInput.removeEventListener('keydown', this.gameInputHandler);
-        this.gameInputHandler = null;
-      }
-      if (this.inputInputHandler) {
-        gameInput.removeEventListener('input', this.inputInputHandler as EventListener);
-        this.inputInputHandler = null;
-      }
-      if (this.inputBlurHandler) {
-        gameInput.removeEventListener('blur', this.inputBlurHandler);
-        this.inputBlurHandler = null;
-      }
-    }
-    delete window.__wordhopper_jump;
-    delete window.__wordhopper_key;
-  }
-
-  private checkPendingClear(): void {
-    if (!this.pendingClear) return;
-    const { obstacle, targetY } = this.pendingClear;
-    const playerY = this.player.getHitbox().top;
-    if (playerY <= targetY) {
-      obstacle.clearWords();
-      this.pendingClear = null;
     }
   }
 }

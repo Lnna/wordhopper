@@ -5,7 +5,7 @@ import { MenuScene } from './scenes/MenuScene';
 import { GameScene } from './scenes/GameScene';
 import { DeathScene } from './scenes/DeathScene';
 import { ShareCardScene } from './scenes/ShareCardScene';
-import { applyRenderZoom, getDisplaySize, getRenderSize, isMobile, isIOS, getMobileScreenHeight } from './config/display';
+import { applyRenderZoom, getDisplaySize, getRenderSize, isMobile, getMobileScreenHeight } from './config/display';
 
 export { getDisplaySize, getRenderResolution, getRenderSize, isMobile, isIOS } from './config/display';
 
@@ -14,7 +14,7 @@ export function createGameConfig(
   viewportWidth = window.innerWidth,
   devicePixelRatio = window.devicePixelRatio || 1
 ): Phaser.Types.Core.GameConfig {
-  const displaySize = getDisplaySize(viewportWidth);
+  const displaySize = getDisplaySize(viewportWidth, window.innerHeight);
   const renderSize = getRenderSize(displaySize.width, displaySize.height, devicePixelRatio);
 
   return {
@@ -76,67 +76,24 @@ function resizeGame(game: Phaser.Game): void {
 
 if (gameShell) {
   if (mobile) {
-    const blocker = document.getElementById('mobile-blocker');
-    if (blocker) blocker.style.display = 'none';
-    gameShell.style.height = Math.round(getMobileScreenHeight() * 0.45) + 'px';
+    const tip = document.getElementById('mobile-tip');
+    if (tip) tip.style.display = 'none';
+    const display = getDisplaySize(window.innerWidth, getMobileScreenHeight());
+    gameShell.style.width = display.width + 'px';
+    gameShell.style.height = Math.min(display.height, window.innerHeight * 0.92) + 'px';
   }
 
   waitForGameFonts().then(() => {
     const game = new Phaser.Game(createGameConfig(gameShell));
 
-    if (isIOS()) {
-      const iosBar = document.getElementById('ios-input-bar');
-      const iosField = document.getElementById('ios-input-field') as HTMLInputElement | null;
-
-      document.body.classList.add('ios-layout');
-      if (iosBar && iosField) {
-        iosBar.classList.add('active');
-        iosField.addEventListener('input', (e: InputEvent) => {
-          const ch = e.data;
-          if (ch && ch.length === 1) {
-            window.__wordhopper_key?.(ch);
-          }
-          iosField.value = '';
-        });
-        iosField.addEventListener('keydown', (e: KeyboardEvent) => {
-          if (e.key === ' ') {
-            e.preventDefault();
-            window.__wordhopper_jump?.();
-            iosField.value = '';
-          }
-        });
-        const gameCanvas = gameShell.querySelector('canvas');
-        if (gameCanvas) {
-          gameCanvas.addEventListener('touchstart', () => { iosField.focus(); }, { passive: true });
-        }
+    window.addEventListener('resize', () => {
+      if (mobile) {
+        const display = getDisplaySize(window.innerWidth, getMobileScreenHeight());
+        gameShell.style.width = display.width + 'px';
+        gameShell.style.height = Math.min(display.height, window.innerHeight * 0.92) + 'px';
       }
-    }
-
-    if (mobile) {
-      const jumpBtn = document.getElementById('jump-btn');
-
-      if (jumpBtn) {
-        jumpBtn.addEventListener('touchstart', (e) => {
-          e.preventDefault();
-          window.__wordhopper_jump?.();
-        });
-      }
-
-      let lastOrientation = screen.orientation?.type || '';
-      screen.orientation?.addEventListener('change', () => {
-        const current = screen.orientation?.type || '';
-        if (current !== lastOrientation) {
-          lastOrientation = current;
-          const h = Math.round(getMobileScreenHeight() * 0.45);
-          gameShell.style.height = h + 'px';
-          resizeGame(game);
-        }
-      });
-    } else {
-      window.addEventListener('resize', () => {
-        resizeGame(game);
-      });
-    }
+      resizeGame(game);
+    });
   });
 } else {
   throw new Error('Missing #game-shell container for Phaser game');

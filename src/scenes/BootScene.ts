@@ -60,35 +60,35 @@ export class BootScene extends Phaser.Scene {
       bg.fillRect(0, y, width, 1);
     }
 
-    addCrispText(this, width / 2, height * 0.32, 'Word Hopper', {
-      fontSize: '40px',
+    addCrispText(this, width / 2, height * 0.36, 'Word Hopper', {
+      fontSize: '42px',
       fontFamily: FONT_DISPLAY,
       color: hex(COLORS.PRIMARY),
       fontStyle: 'bold',
       padding: { right: 8, left: 2, top: 2, bottom: 2 },
     }).setOrigin(0.5);
 
-    const barWidth = width * 0.5;
+    const barWidth = width * 0.55;
     const barHeight = 14;
     const barX = (width - barWidth) / 2;
-    const barY = height * 0.52;
+    const barY = height * 0.5;
 
-    addCrispText(this, width / 2, barY - 22, 'Loading...', {
+    addCrispText(this, width / 2, barY - 22, '加载中...', {
       fontSize: '16px',
       fontFamily: FONT_BODY,
       color: hex(COLORS.TEXT_MUTED),
-      fontStyle: 'normal',
     }).setOrigin(0.5);
 
     const barTrack = this.add.graphics();
     barTrack.fillStyle(COLORS.MUTED_DARK, 0.5);
     barTrack.fillRoundedRect(barX, barY, barWidth, barHeight, 7);
-    barTrack.lineStyle(2, COLORS.BORDER, 0.6);
-    barTrack.strokeRoundedRect(barX, barY, barWidth, barHeight, 7);
 
     const bar = this.add.graphics();
 
-    this.load.spritesheet(SPRITE_KEYS.PLAYER_RUN, 'assets/sprites/hamster-sheet.png', { frameWidth: 48, frameHeight: 48 });
+    this.load.spritesheet(SPRITE_KEYS.PLAYER_RUN, 'assets/sprites/hamster-run.png', {
+      frameWidth: 160,
+      frameHeight: 160,
+    });
     this.load.image(SPRITE_KEYS.PLAYER_JUMP, 'assets/sprites/hamster-jump.png');
     this.load.image(SPRITE_KEYS.PLAYER_DEAD, 'assets/sprites/hamster-dead.png');
 
@@ -119,11 +119,9 @@ export class BootScene extends Phaser.Scene {
 
   private generateTextures(): void {
     const g = this.add.graphics();
-
     this.generateSky(g);
-    this.generateGround(g);
+    this.generateRoad(g);
     this.generateObstacles(g);
-
     g.destroy();
 
     if (!this.anims.exists(SPRITE_KEYS.PLAYER_RUN_ANIM)) {
@@ -138,103 +136,131 @@ export class BootScene extends Phaser.Scene {
 
   private generateSky(g: Phaser.GameObjects.Graphics): void {
     g.clear();
+    const stops = [
+      { t: 0.0, c: 0x86efac },
+      { t: 0.35, c: 0xbbf7d0 },
+      { t: 0.55, c: 0xecfdf5 },
+      { t: 0.7, c: 0x15803d },
+      { t: 1.0, c: 0x116530 },
+    ];
     for (let y = 0; y < CANVAS_HEIGHT; y++) {
       const t = y / CANVAS_HEIGHT;
-      const r = Math.floor(0xEC * (1 - t) + 0xD1 * t);
-      const gv = Math.floor(0xFD * (1 - t) + 0xFA * t);
-      const b = Math.floor(0xF5 * (1 - t) + 0xE5 * t);
-      g.fillStyle((r << 16) | (gv << 8) | b);
+      let a = stops[0];
+      let b = stops[stops.length - 1];
+      for (let i = 0; i < stops.length - 1; i++) {
+        if (t >= stops[i].t && t <= stops[i + 1].t) {
+          a = stops[i];
+          b = stops[i + 1];
+          break;
+        }
+      }
+      const k = (t - a.t) / Math.max(0.0001, b.t - a.t);
+      const ar = (a.c >> 16) & 255, ag = (a.c >> 8) & 255, ab = a.c & 255;
+      const br = (b.c >> 16) & 255, bg = (b.c >> 8) & 255, bb = b.c & 255;
+      const r = Math.round(ar + (br - ar) * k);
+      const gv = Math.round(ag + (bg - ag) * k);
+      const bl = Math.round(ab + (bb - ab) * k);
+      g.fillStyle((r << 16) | (gv << 8) | bl);
       g.fillRect(0, y, CANVAS_WIDTH, 1);
     }
     g.generateTexture(SPRITE_KEYS.BG_SKY, CANVAS_WIDTH, CANVAS_HEIGHT);
   }
 
-  private generateGround(g: Phaser.GameObjects.Graphics): void {
+  private generateRoad(g: Phaser.GameObjects.Graphics): void {
     g.clear();
-    const h = 35;
-    g.fillStyle(darker(COLORS.GROUND, 0.2), 0.15);
-    g.fillRect(0, 3, CANVAS_WIDTH, h);
-    g.fillStyle(COLORS.GROUND, 1);
-    g.fillRect(0, 0, CANVAS_WIDTH, h);
-    g.fillStyle(COLORS.GROUND_LIGHT, 0.5);
-    g.fillRect(0, 0, CANVAS_WIDTH, 4);
-    g.generateTexture(SPRITE_KEYS.BG_GROUND, CANVAS_WIDTH, h);
+    const w = 8;
+    const period = 40;
+    g.fillStyle(0x4ade80, 1);
+    g.fillRect(0, 0, w, period);
+    const limeR = 0x4a, limeG = 0xde, limeB = 0x80;
+    const stripeR = Math.round(255 * 0.45 + limeR * 0.55);
+    const stripeG = Math.round(255 * 0.45 + limeG * 0.55);
+    const stripeB = Math.round(255 * 0.45 + limeB * 0.55);
+    g.fillStyle((stripeR << 16) | (stripeG << 8) | stripeB, 1);
+    g.fillRect(0, 0, w, 8);
+    g.generateTexture(SPRITE_KEYS.BG_ROAD_STRIPES, w, period);
   }
 
   private generateObstacles(g: Phaser.GameObjects.Graphics): void {
-    const TW = 56, TH = 100;
+    const TW = 56;
+    const TH = 80;
 
     g.clear();
     clayEllipse(g, TW / 2, 14, 50, 28, COLORS.OBS_MUSHROOM_CAP);
     g.fillStyle(COLORS.OBS_MUSHROOM_SPOT, 0.7);
     g.fillEllipse(TW / 2 - 14, 8, 10, 6);
     g.fillEllipse(TW / 2 + 10, 18, 8, 5);
-    g.fillEllipse(TW / 2 - 4, 20, 6, 4);
-    g.fillStyle(darker(COLORS.OBS_MUSHROOM_STEM, 0.3), 0.12);
-    g.fillRoundedRect(TW / 2 - 9 + 2, 28 + 2, 18, TH - 28, 6);
-    g.fillStyle(darker(COLORS.OBS_MUSHROOM_STEM, 0.15), 0.1);
-    g.fillRoundedRect(TW / 2 - 9 + 1, 28 + 1, 18, TH - 28, 6);
     g.fillStyle(COLORS.OBS_MUSHROOM_STEM, 1);
-    g.fillRoundedRect(TW / 2 - 9, 28, 18, TH - 28, 6);
-
+    g.fillRoundedRect(TW / 2 - 9, 28, 18, TH - 34, 6);
     g.generateTexture(SPRITE_KEYS.OBSTACLE_MUSHROOM, TW, TH);
 
     g.clear();
-    clayEllipse(g, TW / 2, 7, 44, 14, COLORS.OBS_STUMP);
-    g.fillStyle(darker(COLORS.OBS_STUMP, 0.2), 0.4);
-    g.fillEllipse(TW / 2, 7, 30, 9);
-    g.fillStyle(darker(COLORS.OBS_STUMP, 0.3), 0.3);
-    g.fillEllipse(TW / 2, 7, 18, 5);
-    g.fillStyle(darker(COLORS.OBS_STUMP, 0.4), 0.3);
-    g.fillEllipse(TW / 2, 7, 8, 2.5);
-    clayRect(g, TW / 2 - 18, 7, 36, TH - 7, 8, COLORS.OBS_STUMP);
-
+    clayEllipse(g, TW / 2, 10, 44, 14, COLORS.OBS_STUMP);
+    clayRect(g, TW / 2 - 18, 10, 36, TH - 18, 8, COLORS.OBS_STUMP);
     g.generateTexture(SPRITE_KEYS.OBSTACLE_STUMP, TW, TH);
 
     g.clear();
-    g.fillStyle(darker(COLORS.OBS_BUSH, 0.2), 0.12);
-    g.fillRoundedRect(TW / 2 - 22 + 2, 12 + 2, 44, TH - 12, 10);
-    g.fillStyle(darker(COLORS.OBS_BUSH, 0.1), 0.08);
-    g.fillRoundedRect(TW / 2 - 22 + 1, 12 + 1, 44, TH - 12, 10);
+    clayCircle(g, TW / 2, 18, 16, COLORS.OBS_BUSH);
+    clayCircle(g, TW / 2 - 16, 28, 18, COLORS.OBS_BUSH);
+    clayCircle(g, TW / 2 + 14, 26, 16, COLORS.OBS_BUSH);
     g.fillStyle(COLORS.OBS_BUSH, 1);
-    g.fillRoundedRect(TW / 2 - 22, 12, 44, TH - 12, 10);
-    clayCircle(g, TW / 2, 16, 16, COLORS.OBS_BUSH);
-    clayCircle(g, TW / 2 - 16, 24, 18, COLORS.OBS_BUSH);
-    clayCircle(g, TW / 2 + 14, 22, 16, COLORS.OBS_BUSH);
-    g.fillStyle(lighter(COLORS.OBS_BUSH, 0.2), 0.4);
-    g.fillCircle(TW / 2 - 14, 20, 10);
-    g.fillCircle(TW / 2 + 12, 18, 9);
-    g.fillStyle(lighter(COLORS.OBS_BUSH, 0.15), 0.3);
-    g.fillRoundedRect(TW / 2 - 18, 14, 36, TH * 0.3, 8);
-
+    g.fillRoundedRect(TW / 2 - 20, 30, 40, TH - 36, 10);
     g.generateTexture(SPRITE_KEYS.OBSTACLE_BUSH, TW, TH);
 
     g.clear();
     g.fillStyle(COLORS.GROUND_LIGHT, 0.5);
-    g.fillRoundedRect(TW / 2 - 8, 18, 16, TH - 18, 6);
-    g.fillStyle(COLORS.GROUND_LIGHT, 0.3);
-    g.fillRoundedRect(TW / 2 - 12, 40, 10, 16, 4);
-    g.fillRoundedRect(TW / 2 + 4, 60, 10, 14, 4);
-    g.fillStyle(COLORS.OBS_FLOWERS, 1);
-    drawFlower(g, TW / 2, 10, 10, COLORS.OBS_FLOWERS_CENTER);
-    drawFlower(g, TW / 2 - 18, 24, 8, COLORS.OBS_FLOWERS_CENTER);
-    drawFlower(g, TW / 2 + 16, 20, 8, COLORS.OBS_FLOWERS_CENTER);
-    g.lineStyle(3, COLORS.GROUND_LIGHT, 0.8);
-    g.lineBetween(TW / 2 - 18, 24 + 8, TW / 2 - 18, TH);
-    g.lineBetween(TW / 2 + 16, 20 + 8, TW / 2 + 16, TH);
-    g.lineBetween(TW / 2, 10 + 10, TW / 2, TH);
-
+    g.fillRoundedRect(TW / 2 - 8, 20, 16, TH - 28, 6);
+    drawFlower(g, TW / 2, 12, 10, COLORS.OBS_FLOWERS_CENTER);
+    drawFlower(g, TW / 2 - 16, 24, 8, COLORS.OBS_FLOWERS_CENTER);
+    drawFlower(g, TW / 2 + 14, 22, 8, COLORS.OBS_FLOWERS_CENTER);
     g.generateTexture(SPRITE_KEYS.OBSTACLE_FLOWERS, TW, TH);
+
+    g.clear();
+    clayEllipse(g, TW / 2, TH / 2, 46, 34, COLORS.OBS_ROCK);
+    clayEllipse(g, TW / 2 - 8, TH / 2 + 8, 28, 20, darker(COLORS.OBS_ROCK, 0.15));
+    g.generateTexture(SPRITE_KEYS.OBSTACLE_ROCK, TW, TH);
+
+    g.clear();
+    clayRect(g, TW / 2 - 10, 18, 20, TH - 26, 8, COLORS.OBS_CACTUS);
+    clayRect(g, TW / 2 - 22, 34, 14, 10, 5, COLORS.OBS_CACTUS);
+    clayRect(g, TW / 2 + 8, 28, 14, 10, 5, COLORS.OBS_CACTUS);
+    g.generateTexture(SPRITE_KEYS.OBSTACLE_CACTUS, TW, TH);
+
+    g.clear();
+    clayRect(g, TW / 2 - 20, 20, 40, TH - 28, 6, COLORS.OBS_CRATE);
+    g.lineStyle(2, darker(COLORS.OBS_CRATE, 0.3), 0.8);
+    g.strokeRect(TW / 2 - 16, 26, 32, TH - 40);
+    g.generateTexture(SPRITE_KEYS.OBSTACLE_CRATE, TW, TH);
+
+    g.clear();
+    clayEllipse(g, TW / 2, 18, 36, 16, COLORS.OBS_BARREL);
+    clayRect(g, TW / 2 - 16, 18, 32, TH - 28, 10, COLORS.OBS_BARREL);
+    g.fillStyle(lighter(COLORS.OBS_BARREL, 0.2), 0.5);
+    g.fillRect(TW / 2 - 14, 34, 28, 4);
+    g.generateTexture(SPRITE_KEYS.OBSTACLE_BARREL, TW, TH);
+
+    g.clear();
+    g.fillStyle(COLORS.OBS_STUMP, 1);
+    g.fillRect(TW / 2 - 4, TH - 22, 8, 16);
+    clayCircle(g, TW / 2, 28, 22, COLORS.OBS_PINE);
+    clayCircle(g, TW / 2, 18, 16, COLORS.OBS_PINE);
+    clayCircle(g, TW / 2, 10, 11, COLORS.OBS_PINE);
+    g.generateTexture(SPRITE_KEYS.OBSTACLE_PINE, TW, TH);
+
+    g.clear();
+    clayCircle(g, TW / 2, 28, 20, COLORS.OBS_BUSH);
+    clayCircle(g, TW / 2 - 12, 22, 8, COLORS.OBS_BERRY);
+    clayCircle(g, TW / 2 + 10, 18, 7, COLORS.OBS_BERRY);
+    clayCircle(g, TW / 2 + 2, 30, 6, COLORS.OBS_BERRY);
+    g.generateTexture(SPRITE_KEYS.OBSTACLE_BERRY, TW, TH);
   }
 }
 
 function drawFlower(g: Phaser.GameObjects.Graphics, x: number, y: number, r: number, centerColor: number): void {
   for (let i = 0; i < 5; i++) {
     const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
-    const px = x + Math.cos(a) * r * 0.55;
-    const py = y + Math.sin(a) * r * 0.55;
     g.fillStyle(COLORS.OBS_FLOWERS, 1);
-    g.fillCircle(px, py, r * 0.4);
+    g.fillCircle(x + Math.cos(a) * r * 0.55, y + Math.sin(a) * r * 0.55, r * 0.4);
   }
   g.fillStyle(centerColor, 1);
   g.fillCircle(x, y, r * 0.32);

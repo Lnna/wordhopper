@@ -21,6 +21,7 @@ function mockBrowserEnvironment(devicePixelRatio: number): void {
     configurable: true,
     value: {
       innerWidth: 1440,
+      innerHeight: 900,
       devicePixelRatio,
       addEventListener: vi.fn(),
     },
@@ -41,8 +42,8 @@ function mockBrowserEnvironment(devicePixelRatio: number): void {
         ready: Promise.resolve(),
       },
       getElementById: vi.fn((id: string) => {
-        if (id === 'game-shell') return { id };
-        if (id === 'mobile-blocker') return { style: { display: 'none' } };
+        if (id === 'game-shell') return { id, style: {} };
+        if (id === 'mobile-tip') return { style: { display: 'none' } };
         return null;
       }),
     },
@@ -70,17 +71,24 @@ describe('main game config', () => {
     mockBrowserEnvironment(3);
 
     const mainModule = await import('../src/main') as Record<string, unknown>;
-    const getDisplaySize = mainModule.getDisplaySize as ((viewportWidth?: number) => { width: number; height: number }) | undefined;
+    const getDisplaySize = mainModule.getDisplaySize as ((viewportWidth?: number, viewportHeight?: number) => { width: number; height: number }) | undefined;
     const getRenderResolution = mainModule.getRenderResolution as ((dpr?: number) => number) | undefined;
     const getRenderSize = mainModule.getRenderSize as ((displayWidth?: number, displayHeight?: number, dpr?: number) => { width: number; height: number }) | undefined;
 
     expect(typeof getDisplaySize).toBe('function');
     expect(typeof getRenderResolution).toBe('function');
     expect(typeof getRenderSize).toBe('function');
-    expect(getDisplaySize?.(1440)).toEqual({ width: 1008, height: 567 });
+
+    const display = getDisplaySize?.(1440, 900);
+    expect(display?.width).toBeGreaterThan(300);
+    expect(display?.height).toBeGreaterThan(display!.width);
     expect(getRenderResolution?.(3)).toBe(2);
     expect(getRenderResolution?.(1.5)).toBe(1.5);
-    expect(getRenderSize?.(1008, 567, 3)).toEqual({ width: 1600, height: 900 });
+
+    const render = getRenderSize?.(display!.width, display!.height, 3);
+    expect(render!.width).toBeLessThanOrEqual(900);
+    expect(render!.height).toBeLessThanOrEqual(1600);
+    expect(render!.height / render!.width).toBeCloseTo(800 / 450, 2);
   });
 
   it('builds a fixed-size game config mounted into the game shell', async () => {
@@ -95,16 +103,15 @@ describe('main game config', () => {
     const config = createGameConfig?.(gameShell, 1440, 2);
 
     expect(config).toMatchObject({
-      width: 1600,
-      height: 900,
       parent: gameShell,
       autoRound: false,
       scale: {
         mode: 'FIT',
         autoCenter: 'CENTER_BOTH',
-        width: 1600,
-        height: 900,
       },
     });
+    expect(typeof config?.width).toBe('number');
+    expect(typeof config?.height).toBe('number');
+    expect((config!.height as number) > (config!.width as number)).toBe(true);
   });
 });

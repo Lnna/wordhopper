@@ -1,9 +1,7 @@
-import Phaser from 'phaser';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from './constants';
 
 const MAX_RENDER_RESOLUTION = 2;
 const MAX_RENDER_SCALE = 2;
-const MOBILE_HEIGHT_RATIO = 0.45;
 
 export function isMobile(): boolean {
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
@@ -22,15 +20,26 @@ export function getRenderResolution(devicePixelRatio = window.devicePixelRatio |
   return Math.min(Math.max(devicePixelRatio, 1), MAX_RENDER_RESOLUTION);
 }
 
-export function getDisplaySize(viewportWidth = window.innerWidth, _viewportHeight = window.innerHeight): { width: number; height: number } {
+export function getDisplaySize(
+  viewportWidth = window.innerWidth,
+  viewportHeight = (typeof window !== 'undefined' && window.innerHeight) || 900
+): { width: number; height: number } {
+  const aspect = CANVAS_HEIGHT / CANVAS_WIDTH;
+
   if (isMobile()) {
     const width = viewportWidth;
-    const height = Math.round(getMobileScreenHeight() * MOBILE_HEIGHT_RATIO);
+    const height = Math.round(width * aspect);
     return { width, height };
   }
-  const width = Math.round(viewportWidth * 0.7);
-  const height = Math.round(width * (CANVAS_HEIGHT / CANVAS_WIDTH));
 
+  const maxWidth = Math.round(viewportWidth * 0.36);
+  const maxHeight = Math.round(viewportHeight * 0.88);
+  let width = maxWidth;
+  let height = Math.round(width * aspect);
+  if (height > maxHeight) {
+    height = maxHeight;
+    width = Math.round(height / aspect);
+  }
   return { width, height };
 }
 
@@ -40,17 +49,11 @@ export function getRenderSize(
   devicePixelRatio = window.devicePixelRatio || 1
 ): { width: number; height: number } {
   const resolution = getRenderResolution(devicePixelRatio);
-
-  if (isMobile()) {
-    const renderScaleX = Math.min((displayWidth / CANVAS_WIDTH) * resolution, MAX_RENDER_SCALE);
-    const renderScaleY = Math.min((displayHeight / CANVAS_HEIGHT) * resolution, MAX_RENDER_SCALE);
-    return {
-      width: Math.round(CANVAS_WIDTH * renderScaleX),
-      height: Math.round(CANVAS_HEIGHT * renderScaleY),
-    };
-  }
-
-  const renderScale = Math.min((displayWidth / CANVAS_WIDTH) * resolution, MAX_RENDER_SCALE);
+  const renderScale = Math.min(
+    (displayWidth / CANVAS_WIDTH) * resolution,
+    (displayHeight / CANVAS_HEIGHT) * resolution,
+    MAX_RENDER_SCALE
+  );
   return {
     width: Math.round(CANVAS_WIDTH * renderScale),
     height: Math.round(CANVAS_HEIGHT * renderScale),
@@ -60,18 +63,12 @@ export function getRenderSize(
 export function applyRenderZoom(scene: Phaser.Scene): number {
   const renderWidth = scene.scale.width;
   const renderHeight = scene.scale.height;
-  const zoom = renderWidth / CANVAS_WIDTH;
+  const zoom = Math.min(renderWidth / CANVAS_WIDTH, renderHeight / CANVAS_HEIGHT);
   const camera = scene.cameras.main;
 
   camera.setViewport(0, 0, renderWidth, renderHeight);
   camera.setZoom(zoom);
-
-  const visibleHeight = renderHeight / zoom;
-  if (isMobile() && visibleHeight > CANVAS_HEIGHT) {
-    camera.centerOn(CANVAS_WIDTH / 2, CANVAS_HEIGHT - visibleHeight / 2);
-  } else {
-    camera.centerOn(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
-  }
+  camera.centerOn(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
 
   return zoom;
 }
