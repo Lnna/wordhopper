@@ -17,6 +17,8 @@ export class Player {
   private sprite: Phaser.GameObjects.Sprite;
   private dead = false;
   private busy = false;
+  private baseScaleX = 1;
+  private baseScaleY = 1;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -26,6 +28,8 @@ export class Player {
     this.sprite.setDepth(20);
     this.sprite.setAngle(-10);
     this.sprite.play(SPRITE_KEYS.PLAYER_RUN_ANIM);
+    this.baseScaleX = this.sprite.scaleX;
+    this.baseScaleY = this.sprite.scaleY;
   }
 
   update(): void {
@@ -72,33 +76,96 @@ export class Player {
     });
   }
 
-  /** Inside window: dodge left/right past the obstacle */
+  /** Inside window: dodge left/right past the obstacle with squash-stretch + gravity arc */
   clearJump(direction: -1 | 1, onDodged: () => void, onDone: () => void): void {
     if (this.dead || this.busy) return;
     this.busy = true;
     this.sprite.stop();
     this.sprite.setTexture(SPRITE_KEYS.PLAYER_JUMP);
+
     const targetX = PLAYER_X + direction * PLAYER_DODGE_OFFSET;
+    const lean = -10 + direction * 24;
+
+    // 1) 蓄力下蹲（挤压）
     this.scene.tweens.add({
       targets: this.sprite,
-      x: targetX,
-      duration: 180,
-      ease: 'Cubic.easeOut',
+      scaleX: this.baseScaleX * 1.15,
+      scaleY: this.baseScaleY * 0.8,
+      y: PLAYER_Y + 4,
+      duration: 70,
+      ease: 'Quad.easeOut',
       onComplete: () => {
-        onDodged();
+        // 2) 侧向跃出：x 爆发式弹出 + 重力弧线 + 倾斜 + 拉伸
         this.scene.tweens.add({
           targets: this.sprite,
-          x: PLAYER_X,
-          duration: 260,
-          ease: 'Cubic.easeInOut',
+          x: targetX,
+          angle: lean,
+          scaleX: this.baseScaleX * 0.92,
+          scaleY: this.baseScaleY * 1.1,
+          duration: 200,
+          ease: 'Cubic.easeOut',
+        });
+        this.scene.tweens.add({
+          targets: this.sprite,
+          y: PLAYER_Y - 46,
+          duration: 130,
+          ease: 'Sine.easeOut',
           onComplete: () => {
-            this.busy = false;
-            if (!this.dead) {
-              this.sprite.setTexture(SPRITE_KEYS.PLAYER_RUN);
-              this.sprite.play(SPRITE_KEYS.PLAYER_RUN_ANIM, true);
-            }
-            onDone();
+            this.scene.tweens.add({
+              targets: this.sprite,
+              y: PLAYER_Y,
+              duration: 110,
+              ease: 'Quad.easeIn',
+            });
           },
+        });
+        // 3) 侧位停留（障碍从身旁掠过），随后归位
+        this.scene.time.delayedCall(260, () => {
+          onDodged();
+          this.scene.tweens.add({
+            targets: this.sprite,
+            x: PLAYER_X,
+            angle: -10,
+            scaleX: this.baseScaleX,
+            scaleY: this.baseScaleY,
+            duration: 240,
+            ease: 'Cubic.easeInOut',
+          });
+          this.scene.tweens.add({
+            targets: this.sprite,
+            y: PLAYER_Y - 22,
+            duration: 110,
+            ease: 'Sine.easeOut',
+            yoyo: true,
+          });
+          // 4) 落地挤压再回弹
+          this.scene.time.delayedCall(250, () => {
+            this.scene.tweens.add({
+              targets: this.sprite,
+              scaleX: this.baseScaleX * 1.1,
+              scaleY: this.baseScaleY * 0.86,
+              duration: 70,
+              ease: 'Quad.easeOut',
+              onComplete: () => {
+                this.scene.tweens.add({
+                  targets: this.sprite,
+                  scaleX: this.baseScaleX,
+                  scaleY: this.baseScaleY,
+                  duration: 120,
+                  ease: 'Back.easeOut',
+                  onComplete: () => {
+                    this.sprite.y = PLAYER_Y;
+                    this.busy = false;
+                    if (!this.dead) {
+                      this.sprite.setTexture(SPRITE_KEYS.PLAYER_RUN);
+                      this.sprite.play(SPRITE_KEYS.PLAYER_RUN_ANIM, true);
+                    }
+                    onDone();
+                  },
+                });
+              },
+            });
+          });
         });
       },
     });
@@ -110,13 +177,18 @@ export class Player {
     this.scene.tweens.killTweensOf(this.sprite);
     this.sprite.stop();
     this.sprite.setTexture(SPRITE_KEYS.PLAYER_DEAD);
+    this.sprite.setAngle(-10);
+    this.sprite.setScale(this.baseScaleX, this.baseScaleY);
     this.sprite.y = PLAYER_Y;
   }
 
   reset(): void {
     this.dead = false;
     this.busy = false;
+    this.scene.tweens.killTweensOf(this.sprite);
     this.sprite.setPosition(PLAYER_X, PLAYER_Y);
+    this.sprite.setAngle(-10);
+    this.sprite.setScale(this.baseScaleX, this.baseScaleY);
     this.sprite.setTexture(SPRITE_KEYS.PLAYER_RUN);
     this.sprite.play(SPRITE_KEYS.PLAYER_RUN_ANIM);
   }
