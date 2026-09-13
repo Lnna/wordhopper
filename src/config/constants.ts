@@ -2,6 +2,7 @@ export const CANVAS_WIDTH = 450;
 export const CANVAS_HEIGHT = 800;
 export const PLAYER_X = CANVAS_WIDTH / 2;
 export const PLAYER_Y = CANVAS_HEIGHT - 66;
+export const PLAYER_DODGE_OFFSET = 78;
 export const PLAYER_HEIGHT = 80;
 export const PLAYER_WIDTH = 80;
 export const PLAYER_COLLISION_SHRINK = 0.55;

@@ -60,6 +60,7 @@ export class GameScene extends Phaser.Scene {
   private difficulty: Difficulty = 'easy';
   private tutorial = false;
   private tutorialStarted = false;
+  private dodgeCount = 0;
   private scoreText!: Phaser.GameObjects.Text;
   private speedText!: Phaser.GameObjects.Text;
   private comboText!: Phaser.GameObjects.Text;
@@ -94,6 +95,7 @@ export class GameScene extends Phaser.Scene {
     this.obstacles = [];
     this.tutorial = isTutorialNeeded();
     this.tutorialStarted = false;
+    this.dodgeCount = 0;
     this.pausedByUser = false;
     this.seenMeanings = [];
     this.scoreSystem.reset();
@@ -347,7 +349,10 @@ export class GameScene extends Phaser.Scene {
     if (pointer.y < 56 && pointer.x > CANVAS_WIDTH - 56) return;
 
     const target = this.getTargetObstacle();
-    if (!target) return;
+    if (!target) {
+      this.player.emptyHop();
+      return;
+    }
 
     if (!target.isJumpReady()) {
       this.player.emptyHop();
@@ -371,7 +376,9 @@ export class GameScene extends Phaser.Scene {
 
   private performClear(obstacle: Obstacle, perfect: boolean): void {
     const word = obstacle.getWord();
+    const direction = this.dodgeDirection();
     this.player.clearJump(
+      direction,
       () => {
         obstacle.beginClear(() => {
           this.obstacles = this.obstacles.filter((o) => o !== obstacle);
@@ -394,6 +401,12 @@ export class GameScene extends Phaser.Scene {
       this.tutorial = false;
       markTutorialDone();
     }
+  }
+
+  private dodgeDirection(): -1 | 1 {
+    const dir = this.dodgeCount % 2 === 0 ? -1 : 1;
+    this.dodgeCount += 1;
+    return dir as -1 | 1;
   }
 
   private checkCollisions(): void {

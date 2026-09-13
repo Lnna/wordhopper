@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import {
   PLAYER_X,
   PLAYER_Y,
+  PLAYER_DODGE_OFFSET,
   PLAYER_HEIGHT,
   PLAYER_WIDTH,
   PLAYER_COLLISION_SHRINK,
@@ -71,24 +72,25 @@ export class Player {
     });
   }
 
-  /** Inside window: jump over obstacle; call onApex near apex for fade */
-  clearJump(onApex: () => void, onDone: () => void): void {
+  /** Inside window: dodge left/right past the obstacle */
+  clearJump(direction: -1 | 1, onDodged: () => void, onDone: () => void): void {
     if (this.dead || this.busy) return;
     this.busy = true;
     this.sprite.stop();
     this.sprite.setTexture(SPRITE_KEYS.PLAYER_JUMP);
+    const targetX = PLAYER_X + direction * PLAYER_DODGE_OFFSET;
     this.scene.tweens.add({
       targets: this.sprite,
-      y: PLAYER_Y - 226,
-      duration: 420,
+      x: targetX,
+      duration: 180,
       ease: 'Cubic.easeOut',
       onComplete: () => {
-        onApex();
+        onDodged();
         this.scene.tweens.add({
           targets: this.sprite,
-          y: PLAYER_Y,
-          duration: 340,
-          ease: 'Cubic.easeIn',
+          x: PLAYER_X,
+          duration: 260,
+          ease: 'Cubic.easeInOut',
           onComplete: () => {
             this.busy = false;
             if (!this.dead) {

@@ -186,25 +186,28 @@ export class BootScene extends Phaser.Scene {
     const TH = 80;
 
     g.clear();
-    clayEllipse(g, TW / 2, 14, 50, 28, COLORS.OBS_MUSHROOM_CAP);
-    g.fillStyle(COLORS.OBS_MUSHROOM_SPOT, 0.7);
-    g.fillEllipse(TW / 2 - 14, 8, 10, 6);
-    g.fillEllipse(TW / 2 + 10, 18, 8, 5);
+    clayEllipse(g, TW / 2, 16, 52, 30, COLORS.OBS_MUSHROOM_CAP);
+    g.fillStyle(COLORS.OBS_MUSHROOM_SPOT, 1);
+    g.fillEllipse(TW / 2 - 16, 10, 12, 8);
+    g.fillEllipse(TW / 2 + 12, 20, 10, 7);
+    g.fillEllipse(TW / 2 - 2, 26, 8, 6);
     g.fillStyle(COLORS.OBS_MUSHROOM_STEM, 1);
-    g.fillRoundedRect(TW / 2 - 9, 28, 18, TH - 34, 6);
+    g.fillRoundedRect(TW / 2 - 10, 30, 20, TH - 38, 7);
     g.generateTexture(SPRITE_KEYS.OBSTACLE_MUSHROOM, TW, TH);
 
     g.clear();
-    clayEllipse(g, TW / 2, 10, 44, 14, COLORS.OBS_STUMP);
-    clayRect(g, TW / 2 - 18, 10, 36, TH - 18, 8, COLORS.OBS_STUMP);
+    clayEllipse(g, TW / 2, 12, 46, 16, COLORS.OBS_STUMP);
+    clayRect(g, TW / 2 - 18, 12, 36, TH - 22, 8, COLORS.OBS_STUMP);
+    g.fillStyle(darker(COLORS.OBS_STUMP, 0.35), 0.6);
+    g.fillEllipse(TW / 2, 12, 30, 8);
     g.generateTexture(SPRITE_KEYS.OBSTACLE_STUMP, TW, TH);
 
     g.clear();
-    clayCircle(g, TW / 2, 18, 16, COLORS.OBS_BUSH);
-    clayCircle(g, TW / 2 - 16, 28, 18, COLORS.OBS_BUSH);
-    clayCircle(g, TW / 2 + 14, 26, 16, COLORS.OBS_BUSH);
+    clayCircle(g, TW / 2, 20, 18, COLORS.OBS_BUSH);
+    clayCircle(g, TW / 2 - 18, 30, 20, COLORS.OBS_BUSH);
+    clayCircle(g, TW / 2 + 16, 28, 18, COLORS.OBS_BUSH);
     g.fillStyle(COLORS.OBS_BUSH, 1);
-    g.fillRoundedRect(TW / 2 - 20, 30, 40, TH - 36, 10);
+    g.fillRoundedRect(TW / 2 - 22, 32, 44, TH - 40, 10);
     g.generateTexture(SPRITE_KEYS.OBSTACLE_BUSH, TW, TH);
 
     g.clear();

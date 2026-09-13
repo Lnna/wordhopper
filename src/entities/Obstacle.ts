@@ -191,7 +191,7 @@ export class Obstacle {
     const y = topRatio * CANVAS_HEIGHT;
     this.root.setPosition(PLAYER_X, y);
     this.root.setScale(scale);
-    this.root.setAlpha(0.92 + p * 0.08);
+    this.root.setAlpha(1);
 
     const size = OBSTACLE_BODY_WIDTH * scale;
     this.hitbox.setTo(PLAYER_X - size / 2, y - size, size, size);
@@ -231,10 +231,8 @@ export class Obstacle {
     this.scene.tweens.add({
       targets: this.root,
       alpha: 0,
-      y: this.root.y - 40,
-      duration: 360,
-      delay: 400,
-      ease: 'Cubic.easeIn',
+      duration: 200,
+      ease: 'Cubic.easeOut',
       onComplete: () => {
         this.active = false;
         this.destroy();
