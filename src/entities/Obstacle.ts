@@ -7,6 +7,8 @@ import {
   BUBBLE_PER_ROW,
   CANVAS_HEIGHT,
   CANVAS_WIDTH,
+  CLEAR_EXIT_PROGRESS,
+  CLEAR_SPEED_BOOST,
   HIT_PROGRESS,
   OBSTACLE_BODY_WIDTH,
   OBSTACLE_SPRITES,
@@ -37,6 +39,8 @@ export class Obstacle {
   private active = true;
   private clearing = false;
   private canJump = false;
+  private clearStartProgress = 0;
+  private clearDone: (() => void) | null = null;
   private hitbox = new Phaser.Geom.Rectangle(0, 0, OBSTACLE_BODY_WIDTH, OBSTACLE_BODY_WIDTH);
 
   constructor(scene: Phaser.Scene, config: ObstacleConfig) {
@@ -179,7 +183,22 @@ export class Obstacle {
   }
 
   advance(dt: number, rate: number): void {
-    if (!this.active || this.clearing) return;
+    if (!this.active) return;
+    if (this.clearing) {
+      this.config.progress = Math.min(
+        CLEAR_EXIT_PROGRESS,
+        this.config.progress + rate * CLEAR_SPEED_BOOST * dt
+      );
+      this.applyLayout();
+      if (this.config.progress >= CLEAR_EXIT_PROGRESS) {
+        this.active = false;
+        const cb = this.clearDone;
+        this.clearDone = null;
+        this.destroy();
+        cb?.();
+      }
+      return;
+    }
     this.config.progress = Math.min(HIT_PROGRESS, this.config.progress + rate * dt);
     this.applyLayout();
   }
@@ -191,7 +210,12 @@ export class Obstacle {
     const y = topRatio * CANVAS_HEIGHT;
     this.root.setPosition(PLAYER_X, y);
     this.root.setScale(scale);
-    this.root.setAlpha(1);
+    if (this.clearing) {
+      const t = (p - this.clearStartProgress) / (CLEAR_EXIT_PROGRESS - this.clearStartProgress);
+      this.root.setAlpha(Math.max(0, 1 - t));
+    } else {
+      this.root.setAlpha(1);
+    }
 
     const size = OBSTACLE_BODY_WIDTH * scale;
     this.hitbox.setTo(PLAYER_X - size / 2, y - size, size, size);
@@ -226,19 +250,10 @@ export class Obstacle {
   }
 
   beginClear(onDone: () => void): void {
+    if (this.clearing) return;
     this.clearing = true;
-    this.active = true;
-    this.scene.tweens.add({
-      targets: this.root,
-      alpha: 0,
-      duration: 200,
-      ease: 'Cubic.easeOut',
-      onComplete: () => {
-        this.active = false;
-        this.destroy();
-        onDone();
-      },
-    });
+    this.clearStartProgress = this.config.progress;
+    this.clearDone = onDone;
   }
 
   destroy(): void {

@@ -1,0 +1,132 @@
+import { describe, it, expect, vi } from 'vitest';
+
+Object.defineProperty(globalThis, 'window', {
+  configurable: true,
+  value: { devicePixelRatio: 1 },
+});
+
+vi.mock('phaser', () => ({
+  default: {
+    Geom: {
+      Rectangle: class {
+        x = 0; y = 0; width = 0; height = 0;
+        constructor(x = 0, y = 0, w = 0, h = 0) { this.x = x; this.y = y; this.width = w; this.height = h; }
+        setTo(x: number, y: number, w: number, h: number) { this.x = x; this.y = y; this.width = w; this.height = h; return this; }
+      },
+      Circle: class {},
+    },
+    GameObjects: {},
+    Scene: class {},
+  },
+}));
+
+import { Obstacle } from '../src/entities/Obstacle';
+import { ObstacleType, CLEAR_EXIT_PROGRESS, CLEAR_SPEED_BOOST, HIT_PROGRESS } from '../src/config/constants';
+
+function chainable<T extends object>(extra: T): T {
+  const target = extra as Record<string | symbol, unknown>;
+  const proxy = new Proxy(target, {
+    get(t, k) {
+      if (k in t) return t[k];
+      const fn = () => proxy;
+      t[k] = fn;
+      return fn;
+    },
+  });
+  return proxy as T;
+}
+
+interface MockContainer {
+  x: number; y: number; scale: number; alpha: number; visible: boolean;
+  list: unknown[]; destroyed: boolean;
+  setPosition(x: number, y: number): MockContainer;
+  setScale(s: number): MockContainer;
+  setAlpha(a: number): MockContainer;
+  [k: string]: unknown;
+}
+
+function makeContainer(x = 0, y = 0): MockContainer {
+  const c: MockContainer = {
+    x, y, scale: 1, alpha: 1, visible: true, list: [], destroyed: false,
+    setPosition(nx: number, ny: number) { c.x = nx; c.y = ny; return c; },
+    setScale(s: number) { c.scale = s; return c; },
+    setAlpha(a: number) { c.alpha = a; return c; },
+    destroy() { c.destroyed = true; },
+  };
+  return chainable(c);
+}
+
+function makeScene() {
+  return {
+    add: {
+      container: (x = 0, y = 0) => makeContainer(x, y),
+      sprite: () => chainable({ setOrigin() { return this; }, setDisplaySize() { return this; } }),
+      graphics: () => chainable({}),
+      text: () => chainable({ setOrigin() { return this; } }),
+    },
+    tweens: { add: vi.fn(), killTweensOf: vi.fn() },
+    time: { delayedCall: vi.fn() },
+    events: { emit: vi.fn(), on: vi.fn() },
+  } as unknown as Phaser.Scene;
+}
+
+function makeObstacle(progress: number) {
+  const scene = makeScene();
+  const obs = new Obstacle(scene, {
+    obstacleType: ObstacleType.Mushroom,
+    word: 'cat',
+    meaning: '猫',
+    progress,
+  });
+  return { obs, scene };
+}
+
+describe('Obstacle clearing sweep', () => {
+  it('keeps advancing past the player while clearing instead of freezing', () => {
+    const { obs } = makeObstacle(0.9);
+    obs.beginClear(() => {});
+    const before = obs.getProgress();
+    obs.advance(0.1, 0.14);
+    expect(obs.getProgress()).toBeGreaterThan(before);
+    expect(obs.getProgress()).toBeCloseTo(0.9 + 0.14 * CLEAR_SPEED_BOOST * 0.1, 5);
+  });
+
+  it('fades out proportionally to downward travel', () => {
+    const { obs } = makeObstacle(0.9);
+    obs.beginClear(() => {});
+    obs.advance(0.1, 0.14);
+    const root = (obs as unknown as { root: { alpha: number; y: number } }).root;
+    const travelled = obs.getProgress() - 0.9;
+    const expectedAlpha = 1 - travelled / (CLEAR_EXIT_PROGRESS - 0.9);
+    expect(root.alpha).toBeCloseTo(expectedAlpha, 5);
+    expect(root.alpha).toBeLessThan(1);
+  });
+
+  it('moves downward (y increases) while clearing', () => {
+    const { obs } = makeObstacle(0.9);
+    const root = (obs as unknown as { root: { y: number } }).root;
+    const yBefore = root.y;
+    obs.beginClear(() => {});
+    obs.advance(0.2, 0.14);
+    expect(root.y).toBeGreaterThan(yBefore);
+  });
+
+  it('deactivates and calls back when reaching exit progress', () => {
+    const { obs } = makeObstacle(0.9);
+    const onDone = vi.fn();
+    obs.beginClear(onDone);
+    // advance in small steps until exit
+    for (let i = 0; i < 200 && obs.isActive(); i++) {
+      obs.advance(0.05, 0.14);
+    }
+    expect(obs.isActive()).toBe(false);
+    expect(onDone).toHaveBeenCalledTimes(1);
+    expect(obs.getProgress()).toBeGreaterThanOrEqual(CLEAR_EXIT_PROGRESS);
+  });
+
+  it('still clamps normal approach at HIT_PROGRESS when not clearing', () => {
+    const { obs } = makeObstacle(0.99);
+    obs.advance(1, 0.5);
+    expect(obs.getProgress()).toBe(HIT_PROGRESS);
+  });
+});
