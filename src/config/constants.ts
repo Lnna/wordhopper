@@ -56,8 +56,8 @@ export const SPEED_INCREMENT = 0.01;
 export const WIN_LO = 0.82;
 export const WIN_HI = 0.96;
 export const HIT_PROGRESS = 1;
-export const CLEAR_EXIT_PROGRESS = 1.25;
-export const CLEAR_SPEED_BOOST = 4;
+export const CLEAR_EXIT_PROGRESS = 1.6;
+export const CLEAR_SPEED_BOOST = 5;
 export const PERFECT_WINDOW_RATIO = 0.3;
 
 export const BUBBLE_PER_ROW = 5;

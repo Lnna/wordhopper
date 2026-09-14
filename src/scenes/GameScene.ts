@@ -380,9 +380,12 @@ export class GameScene extends Phaser.Scene {
     this.player.clearJump(
       direction,
       () => {
-        obstacle.beginClear(() => {
-          this.obstacles = this.obstacles.filter((o) => o !== obstacle);
-        });
+        obstacle.beginClear(
+          () => this.player.returnFromDodge(),
+          () => {
+            this.obstacles = this.obstacles.filter((o) => o !== obstacle);
+          }
+        );
       },
       () => {
         /* landed */

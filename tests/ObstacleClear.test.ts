@@ -21,7 +21,7 @@ vi.mock('phaser', () => ({
 }));
 
 import { Obstacle } from '../src/entities/Obstacle';
-import { ObstacleType, CLEAR_EXIT_PROGRESS, CLEAR_SPEED_BOOST, HIT_PROGRESS } from '../src/config/constants';
+import { ObstacleType, CLEAR_EXIT_PROGRESS, CLEAR_SPEED_BOOST, HIT_PROGRESS, PLAYER_Y } from '../src/config/constants';
 
 function chainable<T extends object>(extra: T): T {
   const target = extra as Record<string | symbol, unknown>;
@@ -84,7 +84,7 @@ function makeObstacle(progress: number) {
 describe('Obstacle clearing sweep', () => {
   it('keeps advancing past the player while clearing instead of freezing', () => {
     const { obs } = makeObstacle(0.9);
-    obs.beginClear(() => {});
+    obs.beginClear(() => {}, () => {});
     const before = obs.getProgress();
     obs.advance(0.1, 0.14);
     expect(obs.getProgress()).toBeGreaterThan(before);
@@ -93,7 +93,7 @@ describe('Obstacle clearing sweep', () => {
 
   it('fades out proportionally to downward travel', () => {
     const { obs } = makeObstacle(0.9);
-    obs.beginClear(() => {});
+    obs.beginClear(() => {}, () => {});
     obs.advance(0.1, 0.14);
     const root = (obs as unknown as { root: { alpha: number; y: number } }).root;
     const travelled = obs.getProgress() - 0.9;
@@ -106,7 +106,7 @@ describe('Obstacle clearing sweep', () => {
     const { obs } = makeObstacle(0.9);
     const root = (obs as unknown as { root: { y: number } }).root;
     const yBefore = root.y;
-    obs.beginClear(() => {});
+    obs.beginClear(() => {}, () => {});
     obs.advance(0.2, 0.14);
     expect(root.y).toBeGreaterThan(yBefore);
   });
@@ -114,7 +114,7 @@ describe('Obstacle clearing sweep', () => {
   it('deactivates and calls back when reaching exit progress', () => {
     const { obs } = makeObstacle(0.9);
     const onDone = vi.fn();
-    obs.beginClear(onDone);
+    obs.beginClear(() => {}, onDone);
     // advance in small steps until exit
     for (let i = 0; i < 200 && obs.isActive(); i++) {
       obs.advance(0.05, 0.14);
@@ -128,5 +128,33 @@ describe('Obstacle clearing sweep', () => {
     const { obs } = makeObstacle(0.99);
     obs.advance(1, 0.5);
     expect(obs.getProgress()).toBe(HIT_PROGRESS);
+  });
+
+  it('fires onPassed only when the pack top edge crosses the player foot line', () => {
+    const { obs } = makeObstacle(1.3);
+    const onPassed = vi.fn();
+    const onDone = vi.fn();
+    obs.beginClear(onPassed, onDone);
+    // top edge at p=1.3 is ~677, still above PLAYER_Y=734
+    expect(onPassed).not.toHaveBeenCalled();
+    obs.advance(0.1, 0.5); // +0.25 -> 1.55, top edge ~792 > 734
+    expect(onPassed).toHaveBeenCalledTimes(1);
+    expect(onDone).not.toHaveBeenCalled(); // 1.55 < CLEAR_EXIT_PROGRESS
+  });
+
+  it('guarantees onPassed before destruction even at low start progress', () => {
+    const { obs } = makeObstacle(0.9);
+    const calls: string[] = [];
+    obs.beginClear(
+      () => calls.push('passed'),
+      () => calls.push('done')
+    );
+    for (let i = 0; i < 400 && obs.isActive(); i++) {
+      obs.advance(0.05, 0.14);
+    }
+    expect(calls).toEqual(['passed', 'done']);
+    // passed must happen at or before the player foot line crossing
+    const root = (obs as unknown as { root: { y: number } }).root;
+    expect(root.y).toBeGreaterThan(PLAYER_Y);
   });
 });

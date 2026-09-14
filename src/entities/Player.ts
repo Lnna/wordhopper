@@ -19,6 +19,7 @@ export class Player {
   private busy = false;
   private baseScaleX = 1;
   private baseScaleY = 1;
+  private dodgeDone: (() => void) | null = null;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -76,10 +77,11 @@ export class Player {
     });
   }
 
-  /** Inside window: dodge left/right past the obstacle with squash-stretch + gravity arc */
+  /** Inside window: dodge left/right; returns only when returnFromDodge() is called (obstacle passed) */
   clearJump(direction: -1 | 1, onDodged: () => void, onDone: () => void): void {
     if (this.dead || this.busy) return;
     this.busy = true;
+    this.dodgeDone = onDone;
     this.sprite.stop();
     this.sprite.setTexture(SPRITE_KEYS.PLAYER_JUMP);
 
@@ -116,58 +118,66 @@ export class Player {
               y: PLAYER_Y,
               duration: 110,
               ease: 'Quad.easeIn',
+              onComplete: () => {
+                // 3) 已侧移到位：通知开始清障，等待障碍物完全越过脚线
+                onDodged();
+              },
             });
           },
         });
-        // 3) 侧位停留（障碍从身旁掠过），随后归位
-        this.scene.time.delayedCall(260, () => {
-          onDodged();
+      },
+    });
+  }
+
+  /** Called when the cleared obstacle has fully passed below the player's feet */
+  returnFromDodge(): void {
+    if (this.dead || !this.busy) return;
+    // 4) 归位中路，带小跳弧线
+    this.scene.tweens.add({
+      targets: this.sprite,
+      x: PLAYER_X,
+      angle: -10,
+      scaleX: this.baseScaleX,
+      scaleY: this.baseScaleY,
+      duration: 240,
+      ease: 'Cubic.easeInOut',
+    });
+    this.scene.tweens.add({
+      targets: this.sprite,
+      y: PLAYER_Y - 22,
+      duration: 110,
+      ease: 'Sine.easeOut',
+      yoyo: true,
+    });
+    // 5) 落地挤压再回弹
+    this.scene.time.delayedCall(250, () => {
+      this.scene.tweens.add({
+        targets: this.sprite,
+        scaleX: this.baseScaleX * 1.1,
+        scaleY: this.baseScaleY * 0.86,
+        duration: 70,
+        ease: 'Quad.easeOut',
+        onComplete: () => {
           this.scene.tweens.add({
             targets: this.sprite,
-            x: PLAYER_X,
-            angle: -10,
             scaleX: this.baseScaleX,
             scaleY: this.baseScaleY,
-            duration: 240,
-            ease: 'Cubic.easeInOut',
+            duration: 120,
+            ease: 'Back.easeOut',
+            onComplete: () => {
+              this.sprite.y = PLAYER_Y;
+              this.busy = false;
+              if (!this.dead) {
+                this.sprite.setTexture(SPRITE_KEYS.PLAYER_RUN);
+                this.sprite.play(SPRITE_KEYS.PLAYER_RUN_ANIM, true);
+              }
+              const cb = this.dodgeDone;
+              this.dodgeDone = null;
+              cb?.();
+            },
           });
-          this.scene.tweens.add({
-            targets: this.sprite,
-            y: PLAYER_Y - 22,
-            duration: 110,
-            ease: 'Sine.easeOut',
-            yoyo: true,
-          });
-          // 4) 落地挤压再回弹
-          this.scene.time.delayedCall(250, () => {
-            this.scene.tweens.add({
-              targets: this.sprite,
-              scaleX: this.baseScaleX * 1.1,
-              scaleY: this.baseScaleY * 0.86,
-              duration: 70,
-              ease: 'Quad.easeOut',
-              onComplete: () => {
-                this.scene.tweens.add({
-                  targets: this.sprite,
-                  scaleX: this.baseScaleX,
-                  scaleY: this.baseScaleY,
-                  duration: 120,
-                  ease: 'Back.easeOut',
-                  onComplete: () => {
-                    this.sprite.y = PLAYER_Y;
-                    this.busy = false;
-                    if (!this.dead) {
-                      this.sprite.setTexture(SPRITE_KEYS.PLAYER_RUN);
-                      this.sprite.play(SPRITE_KEYS.PLAYER_RUN_ANIM, true);
-                    }
-                    onDone();
-                  },
-                });
-              },
-            });
-          });
-        });
-      },
+        },
+      });
     });
   }
 

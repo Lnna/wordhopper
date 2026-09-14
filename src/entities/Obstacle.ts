@@ -15,10 +15,14 @@ import {
   OBSTACLE_VISUAL_BASE,
   ObstacleType,
   PLAYER_X,
+  PLAYER_Y,
 } from '../config/constants';
 import { COLORS, FONT_WORD } from '../config/colors';
 import { addCrispText } from '../config/text';
 import { hex } from '../config/utils';
+
+/** wordBlock 顶到障碍本体顶的容器内距离（本体 1.35 倍高 + 18 间距 + 字条半径余量） */
+const PACK_TOP_OFFSET = OBSTACLE_VISUAL_BASE * 1.35 + 18 + 14;
 
 export interface ObstacleConfig {
   obstacleType: ObstacleType;
@@ -41,6 +45,8 @@ export class Obstacle {
   private canJump = false;
   private clearStartProgress = 0;
   private clearDone: (() => void) | null = null;
+  private onPassed: (() => void) | null = null;
+  private passedFired = false;
   private hitbox = new Phaser.Geom.Rectangle(0, 0, OBSTACLE_BODY_WIDTH, OBSTACLE_BODY_WIDTH);
 
   constructor(scene: Phaser.Scene, config: ObstacleConfig) {
@@ -191,6 +197,7 @@ export class Obstacle {
       );
       this.applyLayout();
       if (this.config.progress >= CLEAR_EXIT_PROGRESS) {
+        this.firePassed();
         this.active = false;
         const cb = this.clearDone;
         this.clearDone = null;
@@ -213,12 +220,22 @@ export class Obstacle {
     if (this.clearing) {
       const t = (p - this.clearStartProgress) / (CLEAR_EXIT_PROGRESS - this.clearStartProgress);
       this.root.setAlpha(Math.max(0, 1 - t));
+      const topEdge = y - PACK_TOP_OFFSET * scale;
+      if (topEdge >= PLAYER_Y) this.firePassed();
     } else {
       this.root.setAlpha(1);
     }
 
     const size = OBSTACLE_BODY_WIDTH * scale;
     this.hitbox.setTo(PLAYER_X - size / 2, y - size, size, size);
+  }
+
+  private firePassed(): void {
+    if (this.passedFired) return;
+    this.passedFired = true;
+    const cb = this.onPassed;
+    this.onPassed = null;
+    cb?.();
   }
 
   getProgress(): number {
@@ -249,10 +266,11 @@ export class Obstacle {
     return this.canJump;
   }
 
-  beginClear(onDone: () => void): void {
+  beginClear(onPassed: () => void, onDone: () => void): void {
     if (this.clearing) return;
     this.clearing = true;
     this.clearStartProgress = this.config.progress;
+    this.onPassed = onPassed;
     this.clearDone = onDone;
   }
 
