@@ -339,7 +339,6 @@ export class GameScene extends Phaser.Scene {
     if (result.wrong) {
       this.scoreSystem.breakCombo();
       this.comboText.setText('');
-      obstacle.flashWrong(index);
       audioSystem.play('wrong');
       return;
     }

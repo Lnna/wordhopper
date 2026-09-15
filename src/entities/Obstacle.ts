@@ -17,9 +17,8 @@ import {
   PLAYER_X,
   PLAYER_Y,
 } from '../config/constants';
-import { COLORS, FONT_WORD } from '../config/colors';
+import { FONT_WORD } from '../config/colors';
 import { addCrispText } from '../config/text';
-import { hex } from '../config/utils';
 
 /** wordBlock 顶到障碍本体顶的容器内距离（本体 1.35 倍高 + 18 间距 + 字条半径余量） */
 const PACK_TOP_OFFSET = OBSTACLE_VISUAL_BASE * 1.35 + 18 + 14;
@@ -224,17 +223,6 @@ export class Obstacle {
     this.doneText.setText(this.config.word.slice(0, this.doneCount).toLowerCase());
     this.layoutDoneAndBubbles();
     this.highlightNext();
-  }
-
-  flashWrong(index: number): void {
-    const bubble = this.bubbles[index] ?? this.bubbles[this.getNextIndex()];
-    if (!bubble) return;
-    const label = bubble.getData('label') as Phaser.GameObjects.Text;
-    const prev = label.style.color;
-    label.setColor('#ef4444');
-    this.scene.time.delayedCall(120, () => {
-      if (label.active) label.setColor(prev || hex(COLORS.PRIMARY_DARK));
-    });
   }
 
   markComplete(): void {
