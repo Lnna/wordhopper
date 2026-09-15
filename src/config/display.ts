@@ -12,32 +12,23 @@ export function isIOS(): boolean {
   return /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 }
 
-export function getMobileScreenHeight(): number {
-  return screen.height || window.innerHeight;
-}
-
 export function getRenderResolution(devicePixelRatio = window.devicePixelRatio || 1): number {
   return Math.min(Math.max(devicePixelRatio, 1), MAX_RENDER_RESOLUTION);
 }
 
+/**
+ * 视口内最大化 9:16 画面（全屏 contain）：先撑宽，超高则反向撑高。
+ * 比例差导致的留白由 body 天空渐变背景融合。
+ */
 export function getDisplaySize(
   viewportWidth = window.innerWidth,
   viewportHeight = (typeof window !== 'undefined' && window.innerHeight) || 900
 ): { width: number; height: number } {
   const aspect = CANVAS_HEIGHT / CANVAS_WIDTH;
-
-  if (isMobile()) {
-    const width = viewportWidth;
-    const height = Math.round(width * aspect);
-    return { width, height };
-  }
-
-  const maxWidth = Math.round(viewportWidth * 0.36);
-  const maxHeight = Math.round(viewportHeight * 0.88);
-  let width = maxWidth;
+  let width = viewportWidth;
   let height = Math.round(width * aspect);
-  if (height > maxHeight) {
-    height = maxHeight;
+  if (height > viewportHeight) {
+    height = viewportHeight;
     width = Math.round(height / aspect);
   }
   return { width, height };

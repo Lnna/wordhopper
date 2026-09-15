@@ -5,7 +5,7 @@ import { MenuScene } from './scenes/MenuScene';
 import { GameScene } from './scenes/GameScene';
 import { DeathScene } from './scenes/DeathScene';
 import { ShareCardScene } from './scenes/ShareCardScene';
-import { applyRenderZoom, getDisplaySize, getRenderSize, isMobile, getMobileScreenHeight } from './config/display';
+import { applyRenderZoom, getDisplaySize, getRenderSize, isMobile } from './config/display';
 
 export { getDisplaySize, getRenderResolution, getRenderSize, isMobile, isIOS } from './config/display';
 
@@ -78,10 +78,15 @@ if (gameShell) {
   if (mobile) {
     const tip = document.getElementById('mobile-tip');
     if (tip) tip.style.display = 'none';
-    const display = getDisplaySize(window.innerWidth, getMobileScreenHeight());
-    gameShell.style.width = display.width + 'px';
-    gameShell.style.height = Math.min(display.height, window.innerHeight * 0.92) + 'px';
   }
+
+  // 全屏：shell 填满视口（9:16 contain，留白由 body 天空渐变融合）
+  const applyShellSize = () => {
+    const display = getDisplaySize(window.innerWidth, window.innerHeight);
+    gameShell.style.width = display.width + 'px';
+    gameShell.style.height = display.height + 'px';
+  };
+  applyShellSize();
 
   waitForGameFonts().then(() => {
     const game = new Phaser.Game(createGameConfig(gameShell));
@@ -92,11 +97,7 @@ if (gameShell) {
     }
 
     window.addEventListener('resize', () => {
-      if (mobile) {
-        const display = getDisplaySize(window.innerWidth, getMobileScreenHeight());
-        gameShell.style.width = display.width + 'px';
-        gameShell.style.height = Math.min(display.height, window.innerHeight * 0.92) + 'px';
-      }
+      applyShellSize();
       resizeGame(game);
     });
   });

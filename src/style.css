@@ -7,11 +7,13 @@
 }
 
 body {
-  background: #F0F7F3;
+  /* 与游戏内天空渐变一致：9:16 画面比例差留白在视觉上融入背景 */
+  background: linear-gradient(#86efac 0%, #bbf7d0 35%, #ecfdf5 55%, #15803d 70%, #116530 100%);
   display: flex;
   justify-content: center;
   align-items: center;
   min-height: 100vh;
+  min-height: 100dvh;
   overflow: hidden;
 }
 
@@ -58,21 +60,17 @@ body.ios-layout {
 
 /* ── Game Shell ── */
 
+/* 全屏：尺寸由 main.ts applyShellSize 内联设置（9:16 contain 撑满视口），此处为 JS 加载前兜底 */
 #game-shell {
-  width: min(420px, 92vw);
+  width: min(100vw, calc(100dvh * 9 / 16));
   aspect-ratio: 9 / 16;
-  max-height: 92vh;
 }
 
 #game-shell canvas {
   display: block;
   width: 100% !important;
-  height: auto !important;
+  height: 100% !important;
   outline: none;
-  border-radius: 16px;
-  box-shadow:
-    0 4px 24px rgba(0, 0, 0, 0.08),
-    0 8px 48px rgba(0, 0, 0, 0.06);
 }
 
 /* ── Hidden Input (PC / Android) ── */
@@ -199,17 +197,6 @@ body.ios-layout {
 
   #mobile-tip {
     display: block;
-  }
-
-  #game-shell {
-    width: 100vw;
-  }
-
-  #game-shell canvas {
-    width: 100% !important;
-    height: 100% !important;
-    border-radius: 0;
-    box-shadow: none;
   }
 
   #jump-btn {
