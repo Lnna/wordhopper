@@ -287,7 +287,8 @@ export class GameScene extends Phaser.Scene {
     for (const obs of this.obstacles) obs.advance(dt, rate);
     if (rate > 0) {
       const speedMul = rate / INITIAL_APPROACH_RATE;
-      this.roadStripes.tilePositionY += (ROAD_STRIPE_PERIOD / ROAD_SCROLL_DURATION) * speedMul * dt;
+      // 仓鼠向上跑，路面相对向下滚动（跑步机参照系）
+      this.roadStripes.tilePositionY -= (ROAD_STRIPE_PERIOD / ROAD_SCROLL_DURATION) * speedMul * dt;
     }
     this.checkCollisions();
     this.cleanupObstacles();
