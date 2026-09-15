@@ -145,6 +145,25 @@ describe('Obstacle clearing sweep', () => {
     expect(obs.getProgress()).toBe(HIT_PROGRESS);
   });
 
+  it('setBoost multiplies approach speed (催促加速) and is idempotent', () => {
+    const { obs } = makeObstacle(0.3);
+    obs.advance(0.5, 0.2); // +0.1
+    expect(obs.getProgress()).toBeCloseTo(0.4, 5);
+    obs.setBoost(3);
+    obs.setBoost(3); // 幂等
+    obs.advance(0.5, 0.2); // +0.3
+    expect(obs.getProgress()).toBeCloseTo(0.7, 5);
+    expect(obs.getBoost()).toBe(3);
+  });
+
+  it('setBoost does not affect clearing speed', () => {
+    const { obs } = makeObstacle(0.9);
+    obs.setBoost(3);
+    obs.beginClear(() => { /* noop */ }, () => { /* noop */ });
+    obs.advance(0.1, 0.2); // clearing: rate * CLEAR_SPEED_BOOST, boost 不参与
+    expect(obs.getProgress()).toBeCloseTo(0.9 + 0.1 * 0.2 * 5, 5);
+  });
+
   it('fires onPassed only when the pack top edge crosses the player foot line', () => {
     const { obs } = makeObstacle(1.3);
     const onPassed = vi.fn();

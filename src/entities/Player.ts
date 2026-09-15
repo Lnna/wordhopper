@@ -30,8 +30,17 @@ export class Player {
     this.sprite.setDepth(20);
     this.sprite.setAngle(-10);
     this.sprite.play(SPRITE_KEYS.PLAYER_RUN_ANIM);
+    this.sprite.setInteractive({ useHandCursor: true });
     this.baseScaleX = this.sprite.scaleX;
     this.baseScaleY = this.sprite.scaleY;
+  }
+
+  /** 点击仓鼠：stopPropagation 防穿透到画布空蹦/起跳；判定逻辑由 GameScene 决定 */
+  onTap(handler: () => void): void {
+    this.sprite.on('pointerdown', (p: Phaser.Input.Pointer) => {
+      p.event?.stopPropagation?.();
+      handler();
+    });
   }
 
   update(): void {

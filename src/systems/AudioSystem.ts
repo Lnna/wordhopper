@@ -1,6 +1,6 @@
 import { SFX_ENABLED_KEY } from '../config/constants';
 
-type SfxKind = 'correct' | 'complete' | 'clear' | 'combo' | 'wrong' | 'die' | 'land';
+type SfxKind = 'correct' | 'complete' | 'clear' | 'combo' | 'wrong' | 'die' | 'land' | 'rush';
 
 function readEnabled(): boolean {
   try {
@@ -55,6 +55,7 @@ export class AudioSystem {
         wrong: { f: 180, d: 0.1, type: 'square' },
         die: { f: 110, d: 0.28, type: 'sawtooth' },
         land: { f: 150, d: 0.07, type: 'sine' },
+        rush: { f: 520, d: 0.12, type: 'square' },
       };
       const conf = table[kind];
       osc.type = conf.type;

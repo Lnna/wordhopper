@@ -13,6 +13,9 @@ import {
   PLAYER_Y,
   ROAD_SCROLL_DURATION,
   ROAD_STRIPE_PERIOD,
+  RUSH_BOOST,
+  APPROACH_TOP_FAR,
+  APPROACH_TOP_NEAR,
   SPRITE_KEYS,
   getRoadBox,
   roadTrapezoid,
@@ -73,6 +76,8 @@ export class GameScene extends Phaser.Scene {
   private debugGfx!: Phaser.GameObjects.Graphics;
   private roadStripes!: Phaser.GameObjects.TileSprite;
   private roadMaskGfx!: Phaser.GameObjects.Graphics;
+  private jumpLineGfx!: Phaser.GameObjects.Graphics;
+  private jumpLineActive = false;
   private visibilityHandler: (() => void) | null = null;
   private elapsedTime = 0;
   private alive = true;
@@ -114,6 +119,7 @@ export class GameScene extends Phaser.Scene {
     this.events.on('obstacle-bubble-tap', this.onBubbleTap, this);
     this.input.on('pointerdown', this.onPointerJump, this);
     this.input.topOnly = false;
+    this.player.onTap(() => this.onPlayerTap());
 
     this.spawnObstacle(true);
     this.refreshDefinition();
@@ -177,6 +183,11 @@ export class GameScene extends Phaser.Scene {
       ground.fillStyle(0x15803d, a);
       ground.fillRect(0, CANVAS_HEIGHT - 36 + i, CANVAS_WIDTH, 1);
     }
+
+    // 起跳线：窗口中心高度的横向虚线，常显；可跳时变亮
+    this.jumpLineGfx = this.add.graphics().setDepth(5);
+    this.jumpLineActive = false;
+    this.drawJumpLine(false);
 
     if (DEBUG_WINDOW) {
       this.debugGfx = this.add.graphics().setDepth(6);
@@ -296,6 +307,34 @@ export class GameScene extends Phaser.Scene {
     this.refreshDefinition();
     this.updateHUD();
     this.syncTargetWord();
+    this.syncJumpLine();
+  }
+
+  /** 起跳线高亮：目标障碍已拼完（可跳）时变亮 */
+  private syncJumpLine(): void {
+    const target = this.getTargetObstacle();
+    const canJump = !!target && target.isJumpReady() && !target.isClearing();
+    if (canJump !== this.jumpLineActive) {
+      this.jumpLineActive = canJump;
+      this.drawJumpLine(canJump);
+    }
+  }
+
+  /** 起跳线：窗口中心（perfect 线）高度的横向虚线；active 时橙色高亮 */
+  private drawJumpLine(active: boolean): void {
+    const g = this.jumpLineGfx;
+    g.clear();
+    const p = windowCenter();
+    const y = (APPROACH_TOP_FAR + p * (APPROACH_TOP_NEAR - APPROACH_TOP_FAR)) * CANVAS_HEIGHT;
+    // 该高度路面半宽（内路梯形插值：顶 [0.42,0.58]、底 [0.18,0.82]，内缩 12%）
+    const { boxW, boxTop } = getRoadBox();
+    const t = (y - boxTop) / (CANVAS_HEIGHT - boxTop);
+    const halfW = ((0.16 + (0.64 - 0.16) * t) * boxW) / 2 * 0.88;
+    g.fillStyle(active ? 0xd97706 : 0xffffff, active ? 0.95 : 0.35);
+    const seg = 14, gap = 10;
+    for (let x = -halfW; x + seg <= halfW; x += seg + gap) {
+      g.fillRoundedRect(CANVAS_WIDTH / 2 + x, y - 2, seg, 4, 2);
+    }
   }
 
   private syncTargetWord(): void {
@@ -355,6 +394,30 @@ export class GameScene extends Phaser.Scene {
       audioSystem.play('complete');
       this.hintText.setText(this.tutorial ? '时机到了点空白处起跳' : '');
     }
+  }
+
+  /** 点仓鼠：已拼完且在窗口内 → 起跳；否则催促当前障碍加速逼近（奖励省时 / 惩罚增压） */
+  private onPlayerTap(): void {
+    if (!this.alive || this.pausedByUser || this.player.isBusy()) return;
+    this.ignoreJumpUntil = this.time.now + 80;
+    const target = this.getTargetObstacle();
+    if (!target) return;
+
+    const p = target.getProgress();
+    if (target.isJumpReady() && inWindow(p)) {
+      const center = windowCenter();
+      const half = (WIN_HI - WIN_LO) / 2;
+      const perfect = Math.abs(p - center) <= half * PERFECT_WINDOW_RATIO;
+      this.performClear(target, perfect);
+      return;
+    }
+
+    target.setBoost(RUSH_BOOST);
+    audioSystem.play('rush');
+    this.hintText.setText(target.isJumpReady() ? '冲！障碍加速逼近' : '催促加速 · 快拼完它！');
+    this.time.delayedCall(900, () => {
+      if (this.hintText.active && !this.tutorial) this.hintText.setText('');
+    });
   }
 
   private onPointerJump(pointer: Phaser.Input.Pointer): void {

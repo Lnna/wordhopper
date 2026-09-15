@@ -59,6 +59,8 @@ export const HIT_PROGRESS = 1;
 export const CLEAR_EXIT_PROGRESS = 1.6;
 export const CLEAR_SPEED_BOOST = 5;
 export const PERFECT_WINDOW_RATIO = 0.3;
+/** 窗口外点击仓鼠催促：当前障碍逼近速度倍率（已拼完=省时奖励，未拼完=增压惩罚） */
+export const RUSH_BOOST = 3;
 
 export const BUBBLE_PER_ROW = 5;
 export const APPROACH_TOP_FAR = 0.15;

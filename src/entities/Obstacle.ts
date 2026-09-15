@@ -63,6 +63,8 @@ export class Obstacle {
   private pitch: number;
   private cell: number;
   private packTopOffset: number;
+  /** 催促加速倍率（点仓鼠触发，本障碍有效） */
+  private boost = 1;
   private hitbox = new Phaser.Geom.Rectangle(0, 0, OBSTACLE_BODY_WIDTH, OBSTACLE_BODY_WIDTH);
 
   constructor(scene: Phaser.Scene, config: ObstacleConfig) {
@@ -279,8 +281,17 @@ export class Obstacle {
       }
       return;
     }
-    this.config.progress = Math.min(HIT_PROGRESS, this.config.progress + rate * dt);
+    this.config.progress = Math.min(HIT_PROGRESS, this.config.progress + rate * this.boost * dt);
     this.applyLayout();
+  }
+
+  /** 催促加速（窗口外点仓鼠）：本障碍逼近速度 ×b，清除阶段不受影响 */
+  setBoost(b: number): void {
+    if (!this.clearing && this.active) this.boost = b;
+  }
+
+  getBoost(): number {
+    return this.boost;
   }
 
   applyLayout(): void {
