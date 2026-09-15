@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>成语字块原型 — 方框 vs 气泡</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #1c1917;
+    font-family: 'Quicksand', 'Noto Sans SC', system-ui, sans-serif;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 16px; min-height: 100vh; color: #d1fae5;
+  }
+  h1 { font-size: 18px; margin-bottom: 4px; }
+  .sub { color: #6b7280; font-size: 12px; margin-bottom: 14px; text-align: center; max-width: 560px; line-height: 1.5; }
+  .row { display: flex; flex-direction: column; gap: 22px; align-items: center; }
+  .col { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .col .tag { font-size: 14px; font-weight: 700; color: #fbbf24; }
+  .col .tag small { display: block; color: #a8a29e; font-weight: 400; font-size: 12px; margin-top: 2px; text-align: center; }
+
+  .phone {
+    width: 340px; height: 540px; border-radius: 24px; overflow: hidden;
+    border: 5px solid #374151; position: relative;
+    background: linear-gradient(#86efac 0%, #bbf7d0 35%, #ecfdf5 55%, #15803d 70%, #116530 100%);
+  }
+
+  .road-border {
+    position: absolute; left: 50%; bottom: 0; width: 120%; height: 82%;
+    transform: translateX(-50%); z-index: 2;
+    background: #166534; clip-path: polygon(16% 100%, 84% 100%, 60% 0%, 40% 0%); opacity: .45;
+  }
+  .road {
+    position: absolute; left: 50%; bottom: 0; width: 120%; height: 82%;
+    transform: translateX(-50%); z-index: 3; background-color: #4ade80;
+    background-image: repeating-linear-gradient(to top, rgba(255,255,255,.45) 0 8px, transparent 8px 32px);
+    background-size: 100% 40px;
+    clip-path: polygon(18% 100%, 82% 100%, 58% 0%, 42% 0%); opacity: .75;
+  }
+  .ground {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 30px; z-index: 6;
+    background: linear-gradient(transparent, rgba(21,128,61,.85)); pointer-events: none;
+  }
+
+  .hud { position: absolute; top: 8px; left: 8px; z-index: 30; }
+  .pill {
+    background: rgba(21,128,61,.9); color: #fff; border-radius: 12px;
+    padding: 5px 10px; font-size: 11px; font-weight: 700; line-height: 1.4;
+  }
+
+  /* 障碍物：蘑菇 + 上方字块组 */
+  .pack {
+    position: absolute; left: 50%; top: 42%; z-index: 14;
+    transform: translateX(-50%) scale(1.05);
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+  }
+  .pack .sprite { font-size: 40px; line-height: 1; filter: drop-shadow(0 2px 2px rgba(0,0,0,.25)); }
+
+  .word-row { display: flex; align-items: center; gap: 8px; }
+  .done-text {
+    min-width: 40px; text-align: right;
+    font-size: 20px; font-weight: 900; color: #14532d;
+    text-shadow: 0 1px 0 rgba(255,255,255,.6);
+  }
+  .grid { display: flex; flex-direction: column; gap: 6px; }
+  .grid .line { display: flex; gap: 6px; justify-content: center; }
+
+  /* ===== A 现状：圆形肥皂泡 ===== */
+  .soap {
+    width: 44px; height: 44px; border-radius: 50%;
+    border: none; padding: 0; position: relative;
+    font-size: 19px; font-weight: 900; color: #1e3a2f;
+    display: grid; place-items: center;
+    background:
+      radial-gradient(circle at 32% 28%, rgba(255,255,255,.95) 0 8%, transparent 18%),
+      radial-gradient(circle at 50% 55%, rgba(255,255,255,.25) 0%, rgba(186,230,253,.35) 42%, rgba(125,211,252,.2) 70%, rgba(56,189,248,.12) 100%);
+    box-shadow:
+      inset 0 -3px 8px rgba(14,116,144,.18),
+      inset 0 2px 4px rgba(255,255,255,.55),
+      0 3px 8px rgba(15,23,42,.12);
+    animation: floaty 2.4s ease-in-out infinite;
+  }
+  .soap.is-next {
+    outline: 2px solid rgba(217,119,6,.75); outline-offset: 2px;
+    animation: floaty 1.2s ease-in-out infinite, pulseNext 1s ease-in-out infinite;
+  }
+  .soap.is-done { visibility: hidden; }
+
+  /* ===== B 方框：米白宣纸（活字印刷感） ===== */
+  .tile {
+    width: 44px; height: 44px; border-radius: 10px;
+    position: relative; display: grid; place-items: center;
+    font-size: 22px; font-weight: 900; color: #14532d;
+    background: linear-gradient(165deg, #fffef8 0%, #fbf3dc 55%, #f3e6c0 100%);
+    border: 2px solid rgba(21,128,61,.5);
+    box-shadow:
+      inset 0 2px 3px rgba(255,255,255,.8),
+      inset 0 -3px 5px rgba(146,110,20,.14),
+      0 3px 7px rgba(15,23,42,.16);
+    animation: floaty 2.4s ease-in-out infinite;
+  }
+  .tile.is-next {
+    border-color: rgba(217,119,6,.95);
+    box-shadow:
+      inset 0 2px 3px rgba(255,255,255,.8),
+      inset 0 -3px 5px rgba(146,110,20,.14),
+      0 0 0 3px rgba(217,119,6,.3),
+      0 3px 7px rgba(15,23,42,.16);
+    animation: floaty 1.2s ease-in-out infinite, pulseNext 1s ease-in-out infinite;
+  }
+  .tile.is-done { visibility: hidden; }
+
+  /* ===== C 方框：深绿翡翠（反白字） ===== */
+  .jade {
+    width: 44px; height: 44px; border-radius: 10px;
+    position: relative; display: grid; place-items: center;
+    font-size: 22px; font-weight: 900; color: #f0fdf4;
+    background: linear-gradient(165deg, #22c55e 0%, #15803d 60%, #166534 100%);
+    border: 2px solid rgba(187,247,208,.65);
+    text-shadow: 0 1px 2px rgba(20,83,45,.6);
+    box-shadow:
+      inset 0 2px 3px rgba(255,255,255,.35),
+      inset 0 -3px 5px rgba(20,83,45,.4),
+      0 3px 7px rgba(15,23,42,.18);
+    animation: floaty 2.4s ease-in-out infinite;
+  }
+  .jade.is-next {
+    border-color: #fbbf24;
+    box-shadow:
+      inset 0 2px 3px rgba(255,255,255,.35),
+      inset 0 -3px 5px rgba(20,83,45,.4),
+      0 0 0 3px rgba(251,191,36,.4),
+      0 3px 7px rgba(15,23,42,.18);
+    animation: floaty 1.2s ease-in-out infinite, pulseNext 1s ease-in-out infinite;
+  }
+  .jade.is-done { visibility: hidden; }
+
+  @keyframes floaty {
+    0%,100% { transform: translateY(0); }
+    50% { transform: translateY(-3px); }
+  }
+  @keyframes pulseNext {
+    0%,100% { filter: brightness(1); }
+    50% { filter: brightness(1.14); }
+  }
+
+  .ham-wrap {
+    position: absolute; left: 50%; bottom: 44px; z-index: 20;
+    transform: translateX(-50%) rotate(-10deg);
+  }
+  .hamster {
+    width: 76px; height: 76px;
+    background-image: url('./assets/ham34flat2.png');
+    background-repeat: no-repeat; background-size: 304px 76px;
+    animation: run34 0.48s steps(1) infinite;
+  }
+  @keyframes run34 {
+    0% { background-position: 0 0; } 25% { background-position: -76px 0; }
+    50% { background-position: -152px 0; } 75% { background-position: -228px 0; }
+    100% { background-position: 0 0; }
+  }
+  .def {
+    position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); z-index: 18;
+    font-size: 11px; font-weight: 700; color: #14532d;
+    background: rgba(255,253,245,.94); border-radius: 8px; padding: 3px 10px;
+    white-space: nowrap;
+  }
+
+  .note { margin-top: 12px; max-width: 640px; font-size: 12px; color: #a8a29e; line-height: 1.6; }
+</style>
+</head>
+<body>
+  <h1>成语字块：方框 vs 气泡</h1>
+  <div class="sub">状态示意：已点「一」「心」（左侧拼字），下一个「一」高亮；其余为干扰字。</div>
+
+  <div class="row">
+    <!-- A 现状：气泡 -->
+    <div class="col">
+      <div class="phone">
+        <div class="hud"><div class="pill">分数 320<br><span style="color:#d1fae5;font-weight:400">速度 1.0x</span></div></div>
+        <div class="road-border"></div><div class="road"></div>
+        <div class="pack">
+          <div class="word-row">
+            <div class="done-text">一心</div>
+            <div class="grid">
+              <div class="line">
+                <div class="soap is-done">一</div><div class="soap">志</div><div class="soap is-done">心</div><div class="soap">诚</div>
+              </div>
+              <div class="line">
+                <div class="soap">意</div><div class="soap">专</div><div class="soap is-next">一</div><div class="soap">致</div>
+              </div>
+            </div>
+          </div>
+          <span class="sprite">🍄</span>
+        </div>
+        <div class="ham-wrap"><div class="hamster"></div></div>
+        <div class="ground"></div>
+        <div class="def">释义 只有一个心眼儿，形容做事专心一意</div>
+      </div>
+      <div class="tag">A · 现状气泡<small>圆形肥皂泡，字母时代遗留</small></div>
+    </div>
+
+    <!-- B 方框：米白宣纸 -->
+    <div class="col">
+      <div class="phone">
+        <div class="hud"><div class="pill">分数 320<br><span style="color:#d1fae5;font-weight:400">速度 1.0x</span></div></div>
+        <div class="road-border"></div><div class="road"></div>
+        <div class="pack">
+          <div class="word-row">
+            <div class="done-text">一心</div>
+            <div class="grid">
+              <div class="line">
+                <div class="tile is-done">一</div><div class="tile">志</div><div class="tile is-done">心</div><div class="tile">诚</div>
+              </div>
+              <div class="line">
+                <div class="tile">意</div><div class="tile">专</div><div class="tile is-next">一</div><div class="tile">致</div>
+              </div>
+            </div>
+          </div>
+          <span class="sprite">🍄</span>
+        </div>
+        <div class="ham-wrap"><div class="hamster"></div></div>
+        <div class="ground"></div>
+        <div class="def">释义 只有一个心眼儿，形容做事专心一意</div>
+      </div>
+      <div class="tag">B · 米白方框<small>宣纸/活字印刷感，绿描边</small></div>
+    </div>
+
+    <!-- C 方框：深绿翡翠 -->
+    <div class="col">
+      <div class="phone">
+        <div class="hud"><div class="pill">分数 320<br><span style="color:#d1fae5;font-weight:400">速度 1.0x</span></div></div>
+        <div class="road-border"></div><div class="road"></div>
+        <div class="pack">
+          <div class="word-row">
+            <div class="done-text">一心</div>
+            <div class="grid">
+              <div class="line">
+                <div class="jade is-done">一</div><div class="jade">志</div><div class="jade is-done">心</div><div class="jade">诚</div>
+              </div>
+              <div class="line">
+                <div class="jade">意</div><div class="jade">专</div><div class="jade is-next">一</div><div class="jade">致</div>
+              </div>
+            </div>
+          </div>
+          <span class="sprite">🍄</span>
+        </div>
+        <div class="ham-wrap"><div class="hamster"></div></div>
+        <div class="ground"></div>
+        <div class="def">释义 只有一个心眼儿，形容做事专心一意</div>
+      </div>
+      <div class="tag">C · 深绿方框<small>翡翠反白字，与路面同色系</small></div>
+    </div>
+  </div>
+
+  <div class="note">
+    三版仅字块造型不同，布局/高亮/已拼逻辑一致。B 米白与路面绿形成对比、汉字辨识度高；C 深绿与整体绿色调更统一。
+  </div>
+</body>
+</html>

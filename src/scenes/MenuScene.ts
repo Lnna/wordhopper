@@ -21,7 +21,7 @@ const IDIOM_DESCS: Record<Difficulty, string> = {
 
 export class MenuScene extends Phaser.Scene {
   private selectedDifficulty: Difficulty = 'easy';
-  private selectedMode: GameMode = 'word';
+  private selectedMode: GameMode = 'idiom';
   private difficultyBtns: Record<Difficulty, Phaser.GameObjects.Container> = {} as Record<Difficulty, Phaser.GameObjects.Container>;
   private difficultyDescs: Record<Difficulty, Phaser.GameObjects.Text> = {} as Record<Difficulty, Phaser.GameObjects.Text>;
   private modeTabs: Record<GameMode, Phaser.GameObjects.Container> = {} as Record<GameMode, Phaser.GameObjects.Container>;
@@ -30,8 +30,8 @@ export class MenuScene extends Phaser.Scene {
 
   private static readonly DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard'];
   private static readonly MODES: { key: GameMode; label: string }[] = [
-    { key: 'word', label: '单词' },
     { key: 'idiom', label: '成语' },
+    { key: 'word', label: '单词' },
   ];
 
   constructor() {
@@ -41,7 +41,7 @@ export class MenuScene extends Phaser.Scene {
   create(): void {
     applyRenderZoom(this);
     this.selectedDifficulty = 'easy';
-    this.selectedMode = 'word';
+    this.selectedMode = 'idiom';
     this.difficultyBtns = {} as Record<Difficulty, Phaser.GameObjects.Container>;
     this.difficultyDescs = {} as Record<Difficulty, Phaser.GameObjects.Text>;
     this.modeTabs = {} as Record<GameMode, Phaser.GameObjects.Container>;
@@ -83,14 +83,14 @@ export class MenuScene extends Phaser.Scene {
       fontStyle: 'bold',
     }).setOrigin(0.5).setDepth(5);
 
-    addCrispText(this, width / 2, 128, '点字母泡 · 时机起跳', {
+    addCrispText(this, width / 2, 128, '点字成词 · 时机起跳', {
       fontSize: '16px',
       fontFamily: FONT_BODY,
       color: hex(COLORS.TEXT_ON_LIGHT),
       fontStyle: 'bold',
     }).setOrigin(0.5).setDepth(5);
 
-    // 模式 Tab：单词 | 成语
+    // 模式 Tab：成语 | 单词
     MenuScene.MODES.forEach(({ key, label }, i) => {
       const tabX = width / 2 + (i === 0 ? -58 : 58);
       const tab = this.add.container(tabX, 158).setDepth(5);

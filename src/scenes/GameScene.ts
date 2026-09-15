@@ -78,7 +78,6 @@ export class GameScene extends Phaser.Scene {
   private alive = true;
   private tickAccumulator = 0;
   private pausedByUser = false;
-  private seenMeanings: string[] = [];
   private ignoreJumpUntil = 0;
 
   constructor() {
@@ -87,7 +86,7 @@ export class GameScene extends Phaser.Scene {
 
   init(data: { difficulty: Difficulty; mode?: GameMode }): void {
     this.difficulty = data.difficulty || 'easy';
-    this.mode = data.mode || 'word';
+    this.mode = data.mode || 'idiom';
     this.wordSpawner.loadWords(this.difficulty);
   }
 
@@ -100,7 +99,6 @@ export class GameScene extends Phaser.Scene {
     this.tutorialStarted = false;
     this.dodgeCount = 0;
     this.pausedByUser = false;
-    this.seenMeanings = [];
     this.scoreSystem.reset();
     this.speedManager.reset();
     this.speedManager.setBaseMultiplier(DIFFICULTY_CONFIG[this.difficulty].speedMultiplier);
@@ -479,9 +477,6 @@ export class GameScene extends Phaser.Scene {
     }
     const meaning = target.getMeaning();
     this.defText.setText(`释义 ${meaning}`);
-    if (meaning && !this.seenMeanings.includes(meaning)) {
-      this.seenMeanings.push(meaning);
-    }
   }
 
   private updateHUD(): void {
@@ -539,7 +534,6 @@ export class GameScene extends Phaser.Scene {
         maxCombo: this.scoreSystem.getMaxCombo(),
         difficulty: this.difficulty,
         mode: this.mode,
-        meanings: this.seenMeanings.slice(0, 8),
       });
     });
   }

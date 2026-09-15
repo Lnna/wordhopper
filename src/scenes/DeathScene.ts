@@ -26,7 +26,6 @@ export interface DeathData {
   maxCombo: number;
   difficulty: Difficulty;
   mode?: GameMode;
-  meanings?: string[];
 }
 
 export async function shareResult(data: { title: string; url: string }): Promise<boolean> {
@@ -66,7 +65,7 @@ export class DeathScene extends Phaser.Scene {
   create(data: DeathData): void {
     applyRenderZoom(this);
     this.difficulty = data.difficulty;
-    this.mode = data.mode || 'word';
+    this.mode = data.mode || 'idiom';
     this.deathData = data;
     this.shareURL = buildShareURL({
       score: data.score,
@@ -183,7 +182,7 @@ export class DeathScene extends Phaser.Scene {
       nbGfx.fillStyle(COLORS.ACCENT, 0.15);
       nbGfx.fillRoundedRect(w / 2 - 60, scoreY + 44, 120, 22, 11);
       nbGfx.setDepth(7);
-      addCrispText(this, w / 2, scoreY + 56, '* NEW BEST *', {
+      addCrispText(this, w / 2, scoreY + 56, '★ 新纪录 ★', {
         fontSize: '12px',
         fontFamily: FONT_BODY,
         color: hex(COLORS.ACCENT),
@@ -266,19 +265,7 @@ export class DeathScene extends Phaser.Scene {
       fontStyle: 'bold',
     }).setOrigin(0.5).setDepth(10);
 
-    const meanings = (data.meanings || []).filter(Boolean).slice(0, 6);
-    if (meanings.length) {
-      addCrispText(this, w / 2, cardsY + cardH + 32, `释义回顾：${meanings.join(' · ')}`, {
-        fontSize: '11px',
-        fontFamily: FONT_BODY,
-        color: hex(COLORS.TEXT_MUTED),
-        fontStyle: 'bold',
-        wordWrap: { width: w - 80 },
-        align: 'center',
-      }).setOrigin(0.5, 0).setDepth(10);
-    }
-
-    const btnY = cardsY + cardH + (meanings.length ? 70 : 36);
+    const btnY = cardsY + cardH + 36;
 
     const retryGfx = this.add.graphics();
     retryGfx.fillStyle(COLORS.PRIMARY, 1);

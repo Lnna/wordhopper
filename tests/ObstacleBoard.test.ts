@@ -118,21 +118,21 @@ function nextIndexOf(obs: Obstacle): number {
 }
 
 describe('Obstacle 8 字板', () => {
-  it('渲染 8 个气泡：4 个一排共 2 排', () => {
+  it('渲染 8 个字块：4 个一排共 2 排', () => {
     const { obs } = makeBoardObstacle();
     const bubbles = bubblesOf(obs);
     expect(bubbles.length).toBe(8);
-    // 每排 4 个：x 对称分布 [-60, -20, 20, 60]
+    // 每排 4 个：x 对称分布（间距 46）[-69, -23, 23, 69]
     for (let i = 0; i < 8; i++) {
       const j = i % 4;
-      expect(bubbles[i].x).toBeCloseTo((j - 1.5) * 40, 5);
+      expect(bubbles[i].x).toBeCloseTo((j - 1.5) * 46, 5);
     }
-    // 两排：row 容器 y 分别为 0 和 40
+    // 两排：row 容器 y 分别为 0 和 46
     const wrap = (obs as unknown as { bubbleWrap: MockContainer }).bubbleWrap;
     const rows = wrap.list as MockContainer[];
     expect(rows.length).toBe(2);
     expect(rows[0].y).toBe(0);
-    expect(rows[1].y).toBe(40);
+    expect(rows[1].y).toBe(46);
   });
 
   it('getCharAt 返回槽位字符', () => {

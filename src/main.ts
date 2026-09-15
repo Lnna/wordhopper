@@ -86,6 +86,11 @@ if (gameShell) {
   waitForGameFonts().then(() => {
     const game = new Phaser.Game(createGameConfig(gameShell));
 
+    if (import.meta.env.DEV) {
+      // dev 调试句柄：浏览器自动化验证用（生产构建会被 tree-shake 掉）
+      (window as unknown as { __game: Phaser.Game }).__game = game;
+    }
+
     window.addEventListener('resize', () => {
       if (mobile) {
         const display = getDisplaySize(window.innerWidth, getMobileScreenHeight());

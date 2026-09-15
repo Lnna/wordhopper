@@ -25,6 +25,13 @@ import { hex } from '../config/utils';
 const PACK_TOP_OFFSET = OBSTACLE_VISUAL_BASE * 1.35 + 18 + 14;
 /** 成语模式 8 字板每排字数 */
 const BOARD_PER_ROW = 4;
+/** 单词泡：直径 30、间距 40 */
+const BUBBLE_CELL = 30;
+const BUBBLE_PITCH = 40;
+/** 成语方框字块：边长 38、间距 46（米白宣纸风，prototypes/idiom-tiles.html B 版） */
+const TILE_CELL = 38;
+const TILE_PITCH = 46;
+const TILE_RADIUS = 9;
 
 export interface ObstacleConfig {
   obstacleType: ObstacleType;
@@ -53,6 +60,8 @@ export class Obstacle {
   private onPassed: (() => void) | null = null;
   private passedFired = false;
   private perRow: number;
+  private pitch: number;
+  private cell: number;
   private packTopOffset: number;
   private hitbox = new Phaser.Geom.Rectangle(0, 0, OBSTACLE_BODY_WIDTH, OBSTACLE_BODY_WIDTH);
 
@@ -65,7 +74,9 @@ export class Obstacle {
       ? Math.ceil(config.board.length / BOARD_PER_ROW)
       : Math.ceil(config.word.length / BUBBLE_PER_ROW);
     this.perRow = config.board ? BOARD_PER_ROW : BUBBLE_PER_ROW;
-    this.packTopOffset = PACK_TOP_OFFSET + (rows - 1) * 40;
+    this.pitch = config.board ? TILE_PITCH : BUBBLE_PITCH;
+    this.cell = config.board ? TILE_CELL : BUBBLE_CELL;
+    this.packTopOffset = PACK_TOP_OFFSET + (rows - 1) * this.pitch;
 
     this.wordBlock = scene.add.container(0, 0);
     this.doneText = addCrispText(scene, 0, 0, '', {
@@ -85,7 +96,7 @@ export class Obstacle {
     this.sprite.setDisplaySize(OBSTACLE_VISUAL_BASE, OBSTACLE_VISUAL_BASE * 1.35);
     this.root.add(this.sprite);
 
-    this.wordBlock.setY(-OBSTACLE_VISUAL_BASE * 1.35 - 18 - (rows - 1) * 40);
+    this.wordBlock.setY(-OBSTACLE_VISUAL_BASE * 1.35 - 18 - (rows - 1) * this.pitch);
 
     this.applyLayout();
   }
@@ -93,17 +104,20 @@ export class Obstacle {
   private buildBubbles(word: string): void {
     const items = this.config.board ?? word.toUpperCase().split('');
     const perRow = this.perRow;
-    const fontSize = this.config.board ? '16px' : '14px';
+    const pitch = this.pitch;
+    const fontSize = this.config.board ? '18px' : '14px';
     this.bubbleWrap = this.scene.add.container(0, 0);
     this.wordBlock.add(this.bubbleWrap);
 
     for (let start = 0; start < items.length; start += perRow) {
-      const row = this.scene.add.container(0, Math.floor(start / perRow) * 40);
+      const row = this.scene.add.container(0, Math.floor(start / perRow) * pitch);
       const slice = items.slice(start, start + perRow);
       slice.forEach((ch, j) => {
         const index = start + j;
-        const bubble = this.makeBubble(ch, index, fontSize);
-        bubble.setPosition((j - (slice.length - 1) / 2) * 40, 0);
+        const bubble = this.config.board
+          ? this.makeTile(ch, index, fontSize)
+          : this.makeBubble(ch, index, fontSize);
+        bubble.setPosition((j - (slice.length - 1) / 2) * pitch, 0);
         row.add(bubble);
         this.bubbles[index] = bubble;
       });
@@ -115,23 +129,50 @@ export class Obstacle {
 
   private layoutDoneAndBubbles(): void {
     const firstRowLen = Math.min(this.bubbles.length, this.perRow);
-    const bubblesW = (firstRowLen - 1) * 40 + 30;
+    const bubblesW = (firstRowLen - 1) * this.pitch + this.cell;
     const gap = this.doneText.width > 0 ? 8 : 0;
     this.bubbleWrap.setPosition(0, 0);
     this.doneText.setPosition(-(bubblesW / 2 + gap), 0);
   }
 
-  private makeBubble(letter: string, index: number, fontSize: string): Phaser.GameObjects.Container {
-    const c = this.scene.add.container(0, 0);
-    const g = this.scene.add.graphics();
-    g.fillStyle(0x7dd3fc, 0.35);
+  /** 单词泡：肥皂泡造型 */
+  private drawBubble(g: Phaser.GameObjects.Graphics, isNext: boolean): void {
+    g.clear();
+    g.fillStyle(0x7dd3fc, isNext ? 0.55 : 0.35);
     g.fillCircle(0, 0, 15);
     g.fillStyle(0xffffff, 0.55);
     g.fillCircle(-5, -6, 5);
     g.fillStyle(0xffffff, 0.3);
     g.fillCircle(5, 6, 3);
-    g.lineStyle(2, 0xffffff, 0.7);
+    g.lineStyle(isNext ? 3 : 2, isNext ? 0xd97706 : 0xffffff, isNext ? 0.9 : 0.7);
     g.strokeCircle(0, 0, 15);
+  }
+
+  /** 成语字块：米白宣纸方框（prototypes/idiom-tiles.html B 版） */
+  private drawTile(g: Phaser.GameObjects.Graphics, isNext: boolean): void {
+    const h = TILE_CELL / 2;
+    g.clear();
+    if (isNext) {
+      // 橙色外发光（模拟 box-shadow 0 0 0 3px）
+      g.fillStyle(0xd97706, 0.28);
+      g.fillRoundedRect(-h - 4, -h - 4, TILE_CELL + 8, TILE_CELL + 8, TILE_RADIUS + 4);
+    }
+    // 米白底（顶部亮、底部略深，模拟 165° 渐变）
+    g.fillStyle(0xf7efcf, 1);
+    g.fillRoundedRect(-h, -h, TILE_CELL, TILE_CELL, TILE_RADIUS);
+    g.fillStyle(0xfffef8, 0.85);
+    g.fillRoundedRect(-h + 2, -h + 2, TILE_CELL - 4, TILE_CELL * 0.45, { tl: TILE_RADIUS - 2, tr: TILE_RADIUS - 2, bl: 4, br: 4 });
+    g.fillStyle(0xe8d9ae, 0.55);
+    g.fillRoundedRect(-h + 2, h - TILE_CELL * 0.28, TILE_CELL - 4, TILE_CELL * 0.28 - 2, { tl: 4, tr: 4, bl: TILE_RADIUS - 2, br: TILE_RADIUS - 2 });
+    // 绿描边 / 高亮橙描边
+    g.lineStyle(isNext ? 3 : 2, isNext ? 0xd97706 : 0x15803d, isNext ? 0.95 : 0.5);
+    g.strokeRoundedRect(-h, -h, TILE_CELL, TILE_CELL, TILE_RADIUS);
+  }
+
+  private makeBubble(letter: string, index: number, fontSize: string): Phaser.GameObjects.Container {
+    const c = this.scene.add.container(0, 0);
+    const g = this.scene.add.graphics();
+    this.drawBubble(g, false);
     const t = addCrispText(this.scene, 0, 0, letter, {
       fontSize,
       fontFamily: FONT_WORD,
@@ -139,7 +180,30 @@ export class Obstacle {
       fontStyle: 'bold',
     }).setOrigin(0.5);
     c.add([g, t]);
-    c.setSize(30, 30);
+    c.setSize(BUBBLE_CELL, BUBBLE_CELL);
+    c.setInteractive({ useHandCursor: true });
+    c.setData('index', index);
+    c.setData('gfx', g);
+    c.setData('label', t);
+    c.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      pointer.event?.stopPropagation?.();
+      this.scene.events.emit('obstacle-bubble-tap', this, index);
+    });
+    return c;
+  }
+
+  private makeTile(ch: string, index: number, fontSize: string): Phaser.GameObjects.Container {
+    const c = this.scene.add.container(0, 0);
+    const g = this.scene.add.graphics();
+    this.drawTile(g, false);
+    const t = addCrispText(this.scene, 0, 0, ch, {
+      fontSize,
+      fontFamily: FONT_WORD,
+      color: '#14532d',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    c.add([g, t]);
+    c.setSize(TILE_CELL, TILE_CELL);
     c.setInteractive({ useHandCursor: true });
     c.setData('index', index);
     c.setData('gfx', g);
@@ -191,16 +255,9 @@ export class Obstacle {
     this.bubbles.forEach((b, i) => {
       if (!b?.visible) return;
       const g = b.getData('gfx') as Phaser.GameObjects.Graphics;
-      g.clear();
       const isNext = i === next;
-      g.fillStyle(0x7dd3fc, isNext ? 0.55 : 0.35);
-      g.fillCircle(0, 0, 15);
-      g.fillStyle(0xffffff, 0.55);
-      g.fillCircle(-5, -6, 5);
-      g.fillStyle(0xffffff, 0.3);
-      g.fillCircle(5, 6, 3);
-      g.lineStyle(isNext ? 3 : 2, isNext ? 0xd97706 : 0xffffff, isNext ? 0.9 : 0.7);
-      g.strokeCircle(0, 0, 15);
+      if (this.config.board) this.drawTile(g, isNext);
+      else this.drawBubble(g, isNext);
     });
   }
 
