@@ -17,8 +17,9 @@ import {
   PLAYER_X,
   PLAYER_Y,
 } from '../config/constants';
-import { FONT_WORD } from '../config/colors';
+import { COLORS, FONT_WORD } from '../config/colors';
 import { addCrispText } from '../config/text';
+import { hex } from '../config/utils';
 
 /** wordBlock 顶到障碍本体顶的容器内距离（本体 1.35 倍高 + 18 间距 + 字条半径余量） */
 const PACK_TOP_OFFSET = OBSTACLE_VISUAL_BASE * 1.35 + 18 + 14;
@@ -123,7 +124,6 @@ export class Obstacle {
       this.bubbleWrap.add(row);
     }
     this.layoutDoneAndBubbles();
-    this.highlightNext();
   }
 
   private layoutDoneAndBubbles(): void {
@@ -134,28 +134,23 @@ export class Obstacle {
     this.doneText.setPosition(-(bubblesW / 2 + gap), 0);
   }
 
-  /** 单词泡：肥皂泡造型 */
-  private drawBubble(g: Phaser.GameObjects.Graphics, isNext: boolean): void {
+  /** 单词泡：肥皂泡造型（无「下一泡」高亮，玩家自行找序） */
+  private drawBubble(g: Phaser.GameObjects.Graphics): void {
     g.clear();
-    g.fillStyle(0x7dd3fc, isNext ? 0.55 : 0.35);
+    g.fillStyle(0x7dd3fc, 0.35);
     g.fillCircle(0, 0, 15);
     g.fillStyle(0xffffff, 0.55);
     g.fillCircle(-5, -6, 5);
     g.fillStyle(0xffffff, 0.3);
     g.fillCircle(5, 6, 3);
-    g.lineStyle(isNext ? 3 : 2, isNext ? 0xd97706 : 0xffffff, isNext ? 0.9 : 0.7);
+    g.lineStyle(2, 0xffffff, 0.7);
     g.strokeCircle(0, 0, 15);
   }
 
-  /** 成语字块：米白宣纸方框（prototypes/idiom-tiles.html B 版） */
-  private drawTile(g: Phaser.GameObjects.Graphics, isNext: boolean): void {
+  /** 成语字块：米白宣纸方框（prototypes/idiom-tiles.html B 版；无「下一字」高亮） */
+  private drawTile(g: Phaser.GameObjects.Graphics): void {
     const h = TILE_CELL / 2;
     g.clear();
-    if (isNext) {
-      // 橙色外发光（模拟 box-shadow 0 0 0 3px）
-      g.fillStyle(0xd97706, 0.28);
-      g.fillRoundedRect(-h - 4, -h - 4, TILE_CELL + 8, TILE_CELL + 8, TILE_RADIUS + 4);
-    }
     // 米白底（顶部亮、底部略深，模拟 165° 渐变）
     g.fillStyle(0xf7efcf, 1);
     g.fillRoundedRect(-h, -h, TILE_CELL, TILE_CELL, TILE_RADIUS);
@@ -163,15 +158,15 @@ export class Obstacle {
     g.fillRoundedRect(-h + 2, -h + 2, TILE_CELL - 4, TILE_CELL * 0.45, { tl: TILE_RADIUS - 2, tr: TILE_RADIUS - 2, bl: 4, br: 4 });
     g.fillStyle(0xe8d9ae, 0.55);
     g.fillRoundedRect(-h + 2, h - TILE_CELL * 0.28, TILE_CELL - 4, TILE_CELL * 0.28 - 2, { tl: 4, tr: 4, bl: TILE_RADIUS - 2, br: TILE_RADIUS - 2 });
-    // 绿描边 / 高亮橙描边
-    g.lineStyle(isNext ? 3 : 2, isNext ? 0xd97706 : 0x15803d, isNext ? 0.95 : 0.5);
+    // 绿描边
+    g.lineStyle(2, 0x15803d, 0.5);
     g.strokeRoundedRect(-h, -h, TILE_CELL, TILE_CELL, TILE_RADIUS);
   }
 
   private makeBubble(letter: string, index: number, fontSize: string): Phaser.GameObjects.Container {
     const c = this.scene.add.container(0, 0);
     const g = this.scene.add.graphics();
-    this.drawBubble(g, false);
+    this.drawBubble(g);
     const t = addCrispText(this.scene, 0, 0, letter, {
       fontSize,
       fontFamily: FONT_WORD,
@@ -194,7 +189,7 @@ export class Obstacle {
   private makeTile(ch: string, index: number, fontSize: string): Phaser.GameObjects.Container {
     const c = this.scene.add.container(0, 0);
     const g = this.scene.add.graphics();
-    this.drawTile(g, false);
+    this.drawTile(g);
     const t = addCrispText(this.scene, 0, 0, ch, {
       fontSize,
       fontFamily: FONT_WORD,
@@ -222,7 +217,17 @@ export class Obstacle {
     this.doneCount += 1;
     this.doneText.setText(this.config.word.slice(0, this.doneCount).toLowerCase());
     this.layoutDoneAndBubbles();
-    this.highlightNext();
+  }
+
+  flashWrong(index: number): void {
+    const bubble = this.bubbles[index] ?? this.bubbles[this.getNextIndex()];
+    if (!bubble) return;
+    const label = bubble.getData('label') as Phaser.GameObjects.Text;
+    const prev = label.style.color;
+    label.setColor('#ef4444');
+    this.scene.time.delayedCall(120, () => {
+      if (label.active) label.setColor(prev || hex(COLORS.PRIMARY_DARK));
+    });
   }
 
   markComplete(): void {
@@ -238,20 +243,9 @@ export class Obstacle {
     });
   }
 
-  highlightNext(): void {
-    const next = this.getNextIndex();
-    this.bubbles.forEach((b, i) => {
-      if (!b?.visible) return;
-      const g = b.getData('gfx') as Phaser.GameObjects.Graphics;
-      const isNext = i === next;
-      if (this.config.board) this.drawTile(g, isNext);
-      else this.drawBubble(g, isNext);
-    });
-  }
-
   private getNextIndex(): number {
     if (!this.config.board) return this.doneCount;
-    // 成语模式：高亮「下一个所需字」所在的可见槽位（重复字跳过已隐藏的）
+    // 成语模式：定位「下一个所需字」所在的可见槽位（重复字跳过已隐藏的）；flashWrong 兜底用，不做任何高亮
     const needed = this.config.word[this.doneCount];
     if (!needed) return -1;
     return this.bubbles.findIndex((b, i) => !!b?.visible && this.config.board![i] === needed);
