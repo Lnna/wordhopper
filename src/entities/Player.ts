@@ -8,6 +8,7 @@ import {
   PLAYER_COLLISION_SHRINK,
   SPRITE_KEYS,
 } from '../config/constants';
+import { audioSystem } from '../systems/AudioSystem';
 
 const BW = Math.round(PLAYER_WIDTH * PLAYER_COLLISION_SHRINK);
 const BH = Math.round(PLAYER_HEIGHT * PLAYER_COLLISION_SHRINK);
@@ -77,6 +78,34 @@ export class Player {
     });
   }
 
+  /** 落地尘土：4 个浅绿小点从脚下向两侧扩散淡出 */
+  private spawnDust(): void {
+    const g = this.scene.add.graphics().setDepth(19);
+    g.fillStyle(0xd1fae5, 0.9);
+    g.fillCircle(-10, 0, 3);
+    g.fillCircle(-4, -2, 2.4);
+    g.fillCircle(4, -2, 2.4);
+    g.fillCircle(10, 0, 3);
+    g.setPosition(this.sprite.x, PLAYER_Y - 2);
+    this.scene.tweens.add({
+      targets: g,
+      scaleX: 1.9,
+      scaleY: 1.5,
+      y: PLAYER_Y - 12,
+      alpha: 0,
+      duration: 240,
+      ease: 'Quad.easeOut',
+      onComplete: () => g.destroy(),
+    });
+  }
+
+  /** 恢复奔跑体态（躲避落地后原地跑、等待障碍通过） */
+  private resumeRun(): void {
+    if (this.dead) return;
+    this.sprite.setTexture(SPRITE_KEYS.PLAYER_RUN);
+    this.sprite.play(SPRITE_KEYS.PLAYER_RUN_ANIM, true);
+  }
+
   /** Inside window: dodge left/right; returns only when returnFromDodge() is called (obstacle passed) */
   clearJump(direction: -1 | 1, onDodged: () => void, onDone: () => void): void {
     if (this.dead || this.busy) return;
@@ -119,7 +148,18 @@ export class Player {
               duration: 110,
               ease: 'Quad.easeIn',
               onComplete: () => {
-                // 3) 已侧移到位：通知开始清障，等待障碍物完全越过脚线
+                // 3) 侧移落地：尘土 + 落地音，体态回弹后原地奔跑等待障碍通过（不再定格）
+                this.spawnDust();
+                audioSystem.play('land');
+                this.scene.tweens.add({
+                  targets: this.sprite,
+                  scaleX: this.baseScaleX,
+                  scaleY: this.baseScaleY,
+                  angle: -10,
+                  duration: 130,
+                  ease: 'Back.easeOut',
+                });
+                this.resumeRun();
                 onDodged();
               },
             });
@@ -132,29 +172,32 @@ export class Player {
   /** Called when the cleared obstacle has fully passed below the player's feet */
   returnFromDodge(): void {
     if (this.dead || !this.busy) return;
-    // 4) 归位中路，带小跳弧线
+    const dirHome = (Math.sign(PLAYER_X - this.sprite.x) || 1) as -1 | 1;
+    // 4) 跑回中路：保持奔跑动画，身体向回跑方向倾斜，小跨步起伏（不再滑行）
     this.scene.tweens.add({
       targets: this.sprite,
       x: PLAYER_X,
-      angle: -10,
-      scaleX: this.baseScaleX,
-      scaleY: this.baseScaleY,
-      duration: 240,
+      angle: -10 + dirHome * 12,
+      duration: 200,
       ease: 'Cubic.easeInOut',
     });
     this.scene.tweens.add({
       targets: this.sprite,
-      y: PLAYER_Y - 22,
-      duration: 110,
+      y: PLAYER_Y - 16,
+      duration: 100,
       ease: 'Sine.easeOut',
       yoyo: true,
     });
-    // 5) 落地挤压再回弹
-    this.scene.time.delayedCall(250, () => {
+    // 5) 落地：尘土 + 落地音，挤压再回弹
+    this.scene.time.delayedCall(210, () => {
+      if (this.dead) return;
+      this.spawnDust();
+      audioSystem.play('land');
       this.scene.tweens.add({
         targets: this.sprite,
         scaleX: this.baseScaleX * 1.1,
         scaleY: this.baseScaleY * 0.86,
+        angle: -10,
         duration: 70,
         ease: 'Quad.easeOut',
         onComplete: () => {
@@ -167,10 +210,7 @@ export class Player {
             onComplete: () => {
               this.sprite.y = PLAYER_Y;
               this.busy = false;
-              if (!this.dead) {
-                this.sprite.setTexture(SPRITE_KEYS.PLAYER_RUN);
-                this.sprite.play(SPRITE_KEYS.PLAYER_RUN_ANIM, true);
-              }
+              this.resumeRun();
               const cb = this.dodgeDone;
               this.dodgeDone = null;
               cb?.();
