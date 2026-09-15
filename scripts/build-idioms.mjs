@@ -9,8 +9,9 @@
  * 用法: node scripts/build-idioms.mjs
  * 可选环境变量: IDIOM_SRC / HANZI_SRC / FREQ_SRC 指向本地文件以离线生成
  *
- * 输出每条: { t: "一心一意", p: "yi xin yi yi", m: "释义", d: ["专","致","志","诚"] }
+ * 输出每条: { t: "一心一意", p: "yi xin yi yi", m: "释义", d: ["专","致","志","诚"], f: 1234 }
  *   p 为去声调拼音（接龙匹配用），d 为 4 个预生成干扰字（2500 常用字内、与成语 4 字不重复）
+ *   f 为 THUOCL 词频（难度分层用：容易 >=2000 / 中等 1000-1999 / 困难 400-999）
  */
 import { writeFileSync, readFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -137,7 +138,7 @@ async function main() {
     }
 
     seen.add(word);
-    out.push({ t: word, p: syllables.join(' '), m: meaning, d: distractors });
+    out.push({ t: word, p: syllables.join(' '), m: meaning, d: distractors, f: freqMap.get(word) });
   }
 
   // 排序：首字音节 → 成语，保证输出稳定
@@ -147,12 +148,27 @@ async function main() {
   const firstSyllables = new Set(out.map((e) => e.p.split(' ')[0]));
   const chainable = out.filter((e) => firstSyllables.has(e.p.split(' ')[3])).length;
 
+  // 难度词频带统计（容易 >=2000 / 中等 1000-1999 / 困难 <1000）及各带内部链接通性
+  const tiers = {
+    easy: out.filter((e) => e.f >= 2000),
+    medium: out.filter((e) => e.f >= 1000 && e.f < 2000),
+    hard: out.filter((e) => e.f < 1000),
+  };
+  const tierStats = Object.fromEntries(
+    Object.entries(tiers).map(([name, list]) => {
+      const firsts = new Set(list.map((e) => e.p.split(' ')[0]));
+      const chain = list.filter((e) => firsts.has(e.p.split(' ')[3])).length;
+      return [name, `${list.length} 条, 带内可接率 ${(chain / list.length * 100).toFixed(1)}%`];
+    })
+  );
+
   mkdirSync(dirname(OUT), { recursive: true });
   writeFileSync(OUT, JSON.stringify(out));
 
   console.log(`kept: ${out.length} / ${raw.length}`);
   console.log('skipped:', skipped);
   console.log(`chainable (last syllable has follower): ${chainable} (${(chainable / out.length * 100).toFixed(1)}%)`);
+  console.log('tiers:', tierStats);
   console.log(`written: ${OUT} (${(JSON.stringify(out).length / 1024).toFixed(0)} KB)`);
 }
 

@@ -1,10 +1,12 @@
 import idiomsData from '../data/idioms.json';
+import { Difficulty, IDIOM_FREQ_TIERS } from '../config/constants';
 
 export interface IdiomEntry {
   t: string; // 成语
   p: string; // 去声调拼音，4 音节空格分隔
   m: string; // 释义
   d: string[]; // 4 个干扰字
+  f: number; // THUOCL 词频（难度分层用）
 }
 
 export interface IdiomRound {
@@ -23,6 +25,7 @@ const FALLBACK_POOL_SIZE = 100;
  * - 断链时从「高产开头字队列」取字重新起头；队列耗尽则清空已用集合重建
  */
 export class IdiomSpawner {
+  private allEntries: IdiomEntry[];
   private entries: IdiomEntry[];
   private rand: () => number;
   private bySyllable = new Map<string, IdiomEntry[]>();
@@ -34,7 +37,24 @@ export class IdiomSpawner {
 
   constructor(rand: () => number = Math.random, entries?: IdiomEntry[]) {
     this.rand = rand;
-    this.entries = entries ?? (idiomsData as IdiomEntry[]);
+    this.allEntries = entries ?? (idiomsData as IdiomEntry[]);
+    this.entries = this.allEntries;
+    this.buildIndexes();
+    this.reset();
+  }
+
+  /** 按难度词频带筛选题库（容易/中等/困难），重建索引并重置接龙状态 */
+  setDifficulty(difficulty: Difficulty): void {
+    const tier = IDIOM_FREQ_TIERS[difficulty];
+    const filtered = this.allEntries.filter((e) => e.f >= tier.minFreq && e.f < tier.maxFreq);
+    this.entries = filtered.length > 0 ? filtered : this.allEntries;
+    this.buildIndexes();
+    this.reset();
+  }
+
+  private buildIndexes(): void {
+    this.bySyllable = new Map();
+    this.byChar = new Map();
     for (const e of this.entries) {
       const firstSyllable = e.p.split(' ')[0];
       const firstChar = [...e.t][0];
@@ -43,7 +63,6 @@ export class IdiomSpawner {
       if (!this.byChar.has(firstChar)) this.byChar.set(firstChar, []);
       this.byChar.get(firstChar)!.push(e);
     }
-    this.reset();
   }
 
   reset(): void {

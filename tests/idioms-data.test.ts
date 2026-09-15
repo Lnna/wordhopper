@@ -6,6 +6,7 @@ interface IdiomEntry {
   p: string; // 去声调拼音，4 音节空格分隔
   m: string; // 释义
   d: string[]; // 4 个干扰字
+  f: number; // THUOCL 词频（难度分层用）
 }
 
 const entries = idioms as IdiomEntry[];
@@ -64,5 +65,26 @@ describe('idioms.json 数据校验', () => {
       if (firstSyllables.has(lastSyllable)) chainable++;
     }
     expect(chainable / sampled).toBeGreaterThanOrEqual(0.9);
+  });
+
+  it('每条带 THUOCL 词频 f（≥400 的整数）', () => {
+    for (const e of entries) {
+      expect(Number.isInteger(e.f), e.t).toBe(true);
+      expect(e.f, e.t).toBeGreaterThanOrEqual(400);
+    }
+  });
+
+  it('难度词频带：各带条数充足且带内接龙连通率 ≥80%', () => {
+    const tiers: Record<string, IdiomEntry[]> = {
+      easy: entries.filter((e) => e.f >= 2000),
+      medium: entries.filter((e) => e.f >= 1000 && e.f < 2000),
+      hard: entries.filter((e) => e.f < 1000),
+    };
+    for (const [name, list] of Object.entries(tiers)) {
+      expect(list.length, name).toBeGreaterThanOrEqual(500);
+      const firsts = new Set(list.map((e) => e.p.split(' ')[0]));
+      const chainable = list.filter((e) => firsts.has(e.p.split(' ')[3])).length;
+      expect(chainable / list.length, name).toBeGreaterThanOrEqual(0.8);
+    }
   });
 });

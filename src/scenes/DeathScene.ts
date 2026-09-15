@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { applyRenderZoom, isMobile } from '../config/display';
 import { COLORS, FONT_DISPLAY, FONT_BODY } from '../config/colors';
-import { Difficulty, GameMode, CANVAS_WIDTH, CANVAS_HEIGHT, SPRITE_KEYS } from '../config/constants';
+import { Difficulty, GameMode, CANVAS_WIDTH, CANVAS_HEIGHT, SPRITE_KEYS, DIFFICULTY_LABELS } from '../config/constants';
 import { addCrispText } from '../config/text';
 import { hex, darker } from '../config/utils';
 import { buildShareURL } from './ShareCardScene';
@@ -99,7 +99,7 @@ export class DeathScene extends Phaser.Scene {
     shareBg.strokeRoundedRect(siX, siY, 32, 22, 8);
     shareBg.setDepth(7);
 
-    addCrispText(this, siX + 16, siY + 11, 'share', {
+    addCrispText(this, siX + 16, siY + 11, '分享', {
       fontSize: '9px',
       fontFamily: FONT_BODY,
       color: hex(COLORS.PRIMARY),
@@ -112,7 +112,7 @@ export class DeathScene extends Phaser.Scene {
     shareHitArea.on('pointerout', () => { this.input.setDefaultCursor('default'); shareBg.clear(); shareBg.fillStyle(COLORS.SURFACE, 0.9); shareBg.fillRoundedRect(siX, siY, 32, 22, 8); shareBg.lineStyle(1.5, COLORS.PRIMARY, 0.3); shareBg.strokeRoundedRect(siX, siY, 32, 22, 8); shareBg.setDepth(7); });
     shareHitArea.on('pointerdown', () => this.share());
 
-    this.toastText = addCrispText(this, w / 2 + 148, 52, 'Link copied!', {
+    this.toastText = addCrispText(this, w / 2 + 148, 52, '链接已复制', {
       fontSize: '9px',
       fontFamily: FONT_BODY,
       color: hex(COLORS.ACCENT),
@@ -152,7 +152,7 @@ export class DeathScene extends Phaser.Scene {
       fontStyle: 'bold',
     }).setOrigin(0.5).setDepth(10);
 
-    addCrispText(this, scoreCenterX - 65, scoreY + 20, 'THIS RUN', {
+    addCrispText(this, scoreCenterX - 65, scoreY + 20, '本局得分', {
       fontSize: '10px',
       fontFamily: FONT_BODY,
       color: hex(COLORS.PRIMARY),
@@ -171,7 +171,7 @@ export class DeathScene extends Phaser.Scene {
       fontStyle: 'bold',
     }).setOrigin(0.5).setDepth(10);
 
-    addCrispText(this, scoreCenterX + 65, scoreY + 20, 'BEST', {
+    addCrispText(this, scoreCenterX + 65, scoreY + 20, '历史最高', {
       fontSize: '10px',
       fontFamily: FONT_BODY,
       color: hex(COLORS.ACCENT),
@@ -216,7 +216,7 @@ export class DeathScene extends Phaser.Scene {
       },
     });
 
-    addCrispText(this, w / 2, barY + barHeight + 10, `${Math.round(pct * 100)}% of best`, {
+    addCrispText(this, w / 2, barY + barHeight + 10, `已达最高分的 ${Math.round(pct * 100)}%`, {
       fontSize: '10px',
       fontFamily: FONT_BODY,
       color: hex(COLORS.TEXT_ON_LIGHT),
@@ -231,10 +231,10 @@ export class DeathScene extends Phaser.Scene {
     const cardsY = barY + 55;
 
     const cards = [
-      { value: data.wordsTyped.toString(), label: 'WORDS', fontSize: '14px' },
-      { value: data.wpm.toString(), label: 'WPM', fontSize: '14px' },
-      { value: `x${data.maxCombo}`, label: 'MAX COMBO', fontSize: '14px' },
-      { value: data.bestWord || '—', label: 'BEST WORD', fontSize: '10px' },
+      { value: data.wordsTyped.toString(), label: '完成', fontSize: '14px' },
+      { value: data.wpm.toString(), label: '均速', fontSize: '14px' },
+      { value: `x${data.maxCombo}`, label: '最大连击', fontSize: '14px' },
+      { value: data.bestWord || '—', label: this.mode === 'idiom' ? '最佳成语' : '最佳单词', fontSize: '10px' },
     ];
 
     cards.forEach((card, i) => {
@@ -259,7 +259,7 @@ export class DeathScene extends Phaser.Scene {
       }).setOrigin(0.5).setDepth(10);
     });
 
-    addCrispText(this, w / 2, cardsY + cardH + 12, `> ${this.mode === 'idiom' ? '成语' : '单词'} · ${data.difficulty.toUpperCase()} <`, {
+    addCrispText(this, w / 2, cardsY + cardH + 12, `> ${this.mode === 'idiom' ? '成语' : '单词'} · ${DIFFICULTY_LABELS[data.difficulty]} <`, {
       fontSize: '10px',
       fontFamily: FONT_BODY,
       color: hex(COLORS.TEXT_ON_LIGHT),

@@ -47,7 +47,7 @@ export function roadTrapezoid(
   ];
 }
 
-/** progress/sec at 1.0× (≈11.8s to hit at chill base) — Q-002 interim */
+/** progress/sec at 1.0×（中等难度基准，约 9.4s 从出现到撞上） */
 export const INITIAL_APPROACH_RATE = 0.085;
 export const MAX_SPEED_MULTIPLIER = 2.5;
 export const SPEED_INCREMENT = 0.01;
@@ -66,9 +66,7 @@ export const APPROACH_TOP_NEAR = 0.85;
 export const APPROACH_SCALE_FAR = 0.35;
 export const APPROACH_SCALE_NEAR = 1.3;
 
-/** Sparse spawn gap in progress units (开局偏疏) */
-export const SPAWN_GAP_MIN = 0.32;
-export const SPAWN_GAP_MAX = 0.42;
+/** 新障碍从远处生成的进度（一屏一障：当前障碍开始清除时才生成下一个） */
 export const SPAWN_PROGRESS = 0.02;
 
 export const GRAVITY = 1200;
@@ -78,16 +76,29 @@ export const WORD_SCORE_PER_CHAR = 5;
 export const COMBO_BONUS = 3;
 export const PERFECT_MULTIPLIER = 1.2;
 
-export type Difficulty = 'chill' | 'easy' | 'medium' | 'hard';
+export type Difficulty = 'easy' | 'medium' | 'hard';
 
 /** 游戏模式：单词（点字母）/ 成语（8 字板接龙） */
 export type GameMode = 'word' | 'idiom';
 
+/** 难度中文标签（菜单/结算页/分享卡片共用） */
+export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
+  easy: '容易',
+  medium: '中等',
+  hard: '困难',
+};
+
 export const DIFFICULTY_CONFIG: Record<Difficulty, { minLen: number; maxLen: number; wordFile: string; speedMultiplier: number }> = {
-  chill: { minLen: 3, maxLen: 5, wordFile: 'words-easy.json', speedMultiplier: 0.5 },
-  easy: { minLen: 3, maxLen: 5, wordFile: 'words-easy.json', speedMultiplier: 1.0 },
+  easy: { minLen: 3, maxLen: 5, wordFile: 'words-easy.json', speedMultiplier: 0.8 },
   medium: { minLen: 6, maxLen: 8, wordFile: 'words-medium.json', speedMultiplier: 1.0 },
-  hard: { minLen: 8, maxLen: Infinity, wordFile: 'words-hard.json', speedMultiplier: 1.0 },
+  hard: { minLen: 8, maxLen: Infinity, wordFile: 'words-hard.json', speedMultiplier: 1.2 },
+};
+
+/** 成语模式难度词频带（THUOCL 词频，互斥）：容易最常见，困难较生僻 */
+export const IDIOM_FREQ_TIERS: Record<Difficulty, { minFreq: number; maxFreq: number }> = {
+  easy: { minFreq: 2000, maxFreq: Infinity },
+  medium: { minFreq: 1000, maxFreq: 2000 },
+  hard: { minFreq: 0, maxFreq: 1000 },
 };
 
 export enum ObstacleType {

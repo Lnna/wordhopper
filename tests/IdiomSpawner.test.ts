@@ -14,14 +14,14 @@ function mulberry32(seed: number): () => number {
 const D: [string, string, string, string] = ['甲', '乙', '丙', '丁'];
 // 链路设计：一心一意(末字意/yi) -> 意味深长(末字长/chang，断链) -> 回退到怡然自得(yi 同音开头)
 const mini: IdiomEntry[] = [
-  { t: '一心一意', p: 'yi xin yi yi', m: 'm1', d: [...D] },
-  { t: '意味深长', p: 'yi wei shen chang', m: 'm2', d: [...D] },
-  { t: '怡然自得', p: 'yi ran zi de', m: 'm3', d: [...D] }, // 同音不同字（yi）
+  { t: '一心一意', p: 'yi xin yi yi', m: 'm1', d: [...D], f: 5000 },
+  { t: '意味深长', p: 'yi wei shen chang', m: 'm2', d: [...D], f: 3000 },
+  { t: '怡然自得', p: 'yi ran zi de', m: 'm3', d: [...D], f: 1500 }, // 同音不同字（yi）
 ];
 // 集思广益 末字「益」(yi)，库中无「益」开头成语，只能走同音字
 const miniHomophone: IdiomEntry[] = [
-  { t: '集思广益', p: 'ji si guang yi', m: 'm1', d: [...D] },
-  { t: '怡然自得', p: 'yi ran zi de', m: 'm2', d: [...D] },
+  { t: '集思广益', p: 'ji si guang yi', m: 'm1', d: [...D], f: 2500 },
+  { t: '怡然自得', p: 'yi ran zi de', m: 'm2', d: [...D], f: 1500 },
 ];
 
 /** 恒定 0.5：洗牌/选取结果确定，便于断言精确序列 */
@@ -112,5 +112,19 @@ describe('IdiomSpawner（迷你词库，确定性 rand）', () => {
     // 第 4 次：库已耗尽，应清空 used 重新起头，不抛异常
     const extra = spawner.generateNext();
     expect(mini.some((e) => e.t === extra.idiom)).toBe(true);
+  });
+
+  it('setDifficulty 按词频带筛选题库', () => {
+    // mini：一心一意 f=5000、意味深长 f=3000（容易 ≥2000）；怡然自得 f=1500（中等）
+    const spawner = new IdiomSpawner(half, mini);
+    spawner.setDifficulty('easy');
+    const seen = new Set<string>();
+    for (let i = 0; i < 6; i++) seen.add(spawner.generateNext().idiom);
+    expect(seen.has('怡然自得')).toBe(false);
+    expect([...seen].every((t) => ['一心一意', '意味深长'].includes(t))).toBe(true);
+
+    spawner.setDifficulty('medium');
+    const round = spawner.generateNext();
+    expect(round.idiom).toBe('怡然自得'); // 中等带只有这一条
   });
 });

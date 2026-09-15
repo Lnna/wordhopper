@@ -3,8 +3,6 @@ import {
   Difficulty,
   GameMode,
   ObstacleType,
-  SPAWN_GAP_MAX,
-  SPAWN_GAP_MIN,
   SPAWN_PROGRESS,
 } from '../config/constants';
 import { ObstacleConfig } from '../entities/Obstacle';
@@ -32,16 +30,13 @@ export class ObstacleSpawner {
     this.mode = mode;
     if (mode === 'idiom' && !this.idiomSpawner) {
       this.idiomSpawner = new IdiomSpawner();
+      this.idiomSpawner.setDifficulty(this.difficulty);
     }
   }
 
-  /** Spawn when furthest (most recent) obstacle has advanced enough */
-  canSpawn(obstacles: { getProgress: () => number; isActive: () => boolean }[]): boolean {
-    const alive = obstacles.filter((o) => o.isActive());
-    if (alive.length === 0) return true;
-    const newest = Math.min(...alive.map((o) => o.getProgress()));
-    const gap = this.randomRange(SPAWN_GAP_MIN, SPAWN_GAP_MAX);
-    return newest >= gap;
+  /** 一屏一障：当前障碍开始清除（被跳过）后才生成下一个，保证每个障碍都有完整点字时间 */
+  canSpawn(obstacles: { isActive: () => boolean; isClearing: () => boolean }[]): boolean {
+    return !obstacles.some((o) => o.isActive() && !o.isClearing());
   }
 
   generate(tutorial = false): ObstacleConfig {
@@ -70,9 +65,5 @@ export class ObstacleSpawner {
 
   getDifficultyConfig() {
     return DIFFICULTY_CONFIG[this.difficulty];
-  }
-
-  private randomRange(min: number, max: number): number {
-    return min + Math.random() * (max - min);
   }
 }

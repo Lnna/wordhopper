@@ -1,24 +1,22 @@
 import Phaser from 'phaser';
 import { applyRenderZoom } from '../config/display';
-import { CANVAS_WIDTH, CANVAS_HEIGHT, Difficulty, GameMode, SPRITE_KEYS } from '../config/constants';
+import { CANVAS_WIDTH, CANVAS_HEIGHT, Difficulty, GameMode, SPRITE_KEYS, DIFFICULTY_LABELS } from '../config/constants';
 import { COLORS, FONT_DISPLAY, FONT_BODY } from '../config/colors';
 import { addCrispText } from '../config/text';
 import { hex, darker } from '../config/utils';
 import { audioSystem } from '../systems/AudioSystem';
 
 const WORD_DESCS: Record<Difficulty, string> = {
-  chill: '3–5 字母 · 慢',
-  easy: '3–5 字母',
-  medium: '6–8 字母',
-  hard: '8+ 字母',
+  easy: '3–5 字母 · 慢速',
+  medium: '6–8 字母 · 常速',
+  hard: '8+ 字母 · 快速',
 };
 
-/** 成语模式难度只控制初始速度 */
+/** 成语模式难度 = 常见度 + 速度 */
 const IDIOM_DESCS: Record<Difficulty, string> = {
-  chill: '慢速',
-  easy: '常速',
-  medium: '常速',
-  hard: '常速',
+  easy: '常见成语 · 慢速',
+  medium: '较常见 · 常速',
+  hard: '较生僻 · 快速',
 };
 
 export class MenuScene extends Phaser.Scene {
@@ -30,7 +28,7 @@ export class MenuScene extends Phaser.Scene {
   private bestText!: Phaser.GameObjects.Text;
   private sfxBtn!: Phaser.GameObjects.Text;
 
-  private static readonly DIFFICULTIES: Difficulty[] = ['chill', 'easy', 'medium', 'hard'];
+  private static readonly DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard'];
   private static readonly MODES: { key: GameMode; label: string }[] = [
     { key: 'word', label: '单词' },
     { key: 'idiom', label: '成语' },
@@ -136,10 +134,9 @@ export class MenuScene extends Phaser.Scene {
     });
 
     const difficulties: { key: Difficulty; label: string }[] = [
-      { key: 'chill', label: 'CHILL' },
-      { key: 'easy', label: 'EASY' },
-      { key: 'medium', label: 'MEDIUM' },
-      { key: 'hard', label: 'HARD' },
+      { key: 'easy', label: DIFFICULTY_LABELS.easy },
+      { key: 'medium', label: DIFFICULTY_LABELS.medium },
+      { key: 'hard', label: DIFFICULTY_LABELS.hard },
     ];
 
     const btnStartY = 300;
@@ -265,7 +262,7 @@ export class MenuScene extends Phaser.Scene {
 
   private refreshBest(): void {
     const best = this.readBest(this.selectedMode, this.selectedDifficulty);
-    this.bestText.setText(best > 0 ? `BEST ${best.toLocaleString()}` : '竖屏 · 单手指尖');
+    this.bestText.setText(best > 0 ? `最高 ${best.toLocaleString()}` : '竖屏 · 单手指尖');
   }
 
   private updateHighlight(): void {
@@ -279,12 +276,12 @@ export class MenuScene extends Phaser.Scene {
         bg.fillRoundedRect(-130, -20, 260, 40, 14);
         bg.lineStyle(2.5, COLORS.PRIMARY, 0.85);
         bg.strokeRoundedRect(-130, -20, 260, 40, 14);
-        labelText.setText('> ' + key.toUpperCase());
+        labelText.setText('> ' + DIFFICULTY_LABELS[key]);
         labelText.setColor(hex(COLORS.PRIMARY));
       } else {
         bg.fillStyle(COLORS.MUTED_DARK, 0.75);
         bg.fillRoundedRect(-130, -20, 260, 40, 14);
-        labelText.setText('  ' + key.toUpperCase());
+        labelText.setText('  ' + DIFFICULTY_LABELS[key]);
         labelText.setColor(hex(COLORS.TEXT_ON_LIGHT));
       }
     });

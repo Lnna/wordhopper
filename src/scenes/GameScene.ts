@@ -208,14 +208,14 @@ export class GameScene extends Phaser.Scene {
     hudGfx.fillStyle(COLORS.PRIMARY, 0.9);
     hudGfx.fillRoundedRect(10, 10, 150, 50, 14);
 
-    addCrispText(this, 24, 22, 'SCORE', {
+    addCrispText(this, 24, 22, '分数', {
       fontSize: '12px', color: '#FFFFFF', fontFamily: FONT_BODY, fontStyle: 'bold',
     }).setDepth(20);
     this.scoreText = addCrispText(this, 150, 22, '0', {
       fontSize: '12px', color: '#FFFFFF', fontFamily: FONT_BODY, fontStyle: 'bold',
     }).setOrigin(1, 0).setDepth(20);
 
-    addCrispText(this, 24, 40, 'SPEED', {
+    addCrispText(this, 24, 40, '速度', {
       fontSize: '11px', color: '#D1FAE5', fontFamily: FONT_BODY,
     }).setDepth(20);
     this.speedText = addCrispText(this, 150, 40, '1.0x', {
@@ -491,13 +491,13 @@ export class GameScene extends Phaser.Scene {
 
   private updateComboDisplay(perfect: boolean): void {
     const combo = this.scoreSystem.getCombo();
-    this.comboText.setText(`x${combo} COMBO`);
+    this.comboText.setText(`x${combo} 连击`);
     this.comboText.setColor(combo >= 5 ? '#B45309' : '#15803D');
     this.tweens.killTweensOf(this.comboText);
     this.comboText.setScale(1.35);
     this.tweens.add({ targets: this.comboText, scaleX: 1, scaleY: 1, duration: 200, ease: 'Back.easeOut' });
 
-    this.hitLabel.setText(perfect ? 'PERFECT!' : 'GOOD');
+    this.hitLabel.setText(perfect ? '完美！' : '不错！');
     this.hitLabel.setPosition(PLAYER_X, PLAYER_Y - 130);
     this.hitLabel.setColor(perfect ? '#FCD34D' : '#34D399');
     this.hitLabel.setAlpha(1);

@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { applyRenderZoom, isMobile } from '../config/display';
 import { COLORS, FONT_DISPLAY, FONT_BODY } from '../config/colors';
-import { Difficulty, CANVAS_WIDTH, CANVAS_HEIGHT, SPRITE_KEYS } from '../config/constants';
+import { Difficulty, CANVAS_WIDTH, CANVAS_HEIGHT, SPRITE_KEYS, DIFFICULTY_LABELS } from '../config/constants';
 import { addCrispText } from '../config/text';
 import { hex, darker } from '../config/utils';
 
@@ -30,7 +30,7 @@ export function parseShareParams(): ShareCardData | null {
   const wpm = parseInt(params.get('w') || '', 10);
   const bestWord = params.get('bw') || '';
   const difficulty = (params.get('d') || '') as Difficulty;
-  if (Number.isNaN(score) || !['chill', 'easy', 'medium', 'hard'].includes(difficulty)) return null;
+  if (Number.isNaN(score) || !['easy', 'medium', 'hard'].includes(difficulty)) return null;
   return { score, wpm: wpm || 0, bestWord, difficulty };
 }
 
@@ -75,7 +75,7 @@ export class ShareCardScene extends Phaser.Scene {
       ease: 'Sine.easeInOut',
     });
 
-    addCrispText(this, w / 2, 88, 'Friend\'s Score', {
+    addCrispText(this, w / 2, 88, '好友成绩', {
       fontSize: '24px',
       fontFamily: FONT_DISPLAY,
       color: hex(COLORS.PRIMARY),
@@ -91,7 +91,7 @@ export class ShareCardScene extends Phaser.Scene {
       fontStyle: 'bold',
     }).setOrigin(0.5).setDepth(10);
 
-    addCrispText(this, w / 2, scoreY + 28, '> SCORE <', {
+    addCrispText(this, w / 2, scoreY + 28, '> 分数 <', {
       fontSize: '10px',
       fontFamily: FONT_BODY,
       color: hex(COLORS.TEXT_MUTED),
@@ -106,9 +106,9 @@ export class ShareCardScene extends Phaser.Scene {
     const cardsY = scoreY + 52;
 
     const cards = [
-      { value: data.wpm.toString(), label: 'WPM' },
-      { value: data.bestWord || '—', label: 'BEST WORD' },
-      { value: data.difficulty.toUpperCase(), label: 'DIFFICULTY' },
+      { value: data.wpm.toString(), label: '均速' },
+      { value: data.bestWord || '—', label: '最佳' },
+      { value: DIFFICULTY_LABELS[data.difficulty], label: '难度' },
     ];
 
     cards.forEach((card, i) => {
@@ -139,7 +139,7 @@ export class ShareCardScene extends Phaser.Scene {
     promptBg.fillRoundedRect(w / 2 - 110, promptY, 220, 24, 12);
     promptBg.setDepth(7);
 
-    const playPrompt = addCrispText(this, w / 2, promptY + 12, '> CAN YOU BEAT IT? <', {
+    const playPrompt = addCrispText(this, w / 2, promptY + 12, '> 你能超过我吗？ <', {
       fontSize: '13px',
       fontFamily: FONT_BODY,
       color: hex(COLORS.ACCENT),
@@ -167,14 +167,14 @@ export class ShareCardScene extends Phaser.Scene {
     playGfx.on('pointerout', () => { this.input.setDefaultCursor('default'); });
     playGfx.on('pointerdown', () => this.play());
 
-    addCrispText(this, w / 2, btnY + 18, 'PLAY', {
+    addCrispText(this, w / 2, btnY + 18, '开始挑战', {
       fontSize: '16px',
       fontFamily: FONT_BODY,
       color: '#FFFFFF',
       fontStyle: 'bold',
     }).setOrigin(0.5).setDepth(10);
 
-    addCrispText(this, w / 2, btnY + 48, 'or press SPACE', {
+    addCrispText(this, w / 2, btnY + 48, '或按空格键', {
       fontSize: '11px',
       fontFamily: FONT_BODY,
       color: hex(COLORS.TEXT_MUTED),
