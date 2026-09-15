@@ -61,6 +61,8 @@ export const CLEAR_SPEED_BOOST = 5;
 export const PERFECT_WINDOW_RATIO = 0.3;
 /** 窗口外点击仓鼠催促：当前障碍逼近速度倍率（已拼完=省时奖励，未拼完=增压惩罚） */
 export const RUSH_BOOST = 3;
+/** 催促奖励分基数：实际得分 = (1-进度) × 基数 × 速度倍率（催得越早分越高） */
+export const RUSH_BONUS_BASE = 15;
 
 export const BUBBLE_PER_ROW = 5;
 export const APPROACH_TOP_FAR = 0.15;

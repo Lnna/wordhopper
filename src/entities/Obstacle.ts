@@ -65,6 +65,8 @@ export class Obstacle {
   private packTopOffset: number;
   /** 催促加速倍率（点仓鼠触发，本障碍有效） */
   private boost = 1;
+  /** 催促奖励分是否已发放（每障碍限一次，防连点刷分） */
+  private rushRewarded = false;
   private hitbox = new Phaser.Geom.Rectangle(0, 0, OBSTACLE_BODY_WIDTH, OBSTACLE_BODY_WIDTH);
 
   constructor(scene: Phaser.Scene, config: ObstacleConfig) {
@@ -292,6 +294,13 @@ export class Obstacle {
 
   getBoost(): number {
     return this.boost;
+  }
+
+  /** 领取催促奖励资格：每障碍仅第一次返回 true */
+  claimRushReward(): boolean {
+    if (this.rushRewarded) return false;
+    this.rushRewarded = true;
+    return true;
   }
 
   applyLayout(): void {

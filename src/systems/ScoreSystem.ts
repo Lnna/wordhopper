@@ -1,4 +1,4 @@
-import { BASE_SCORE_PER_TICK, WORD_SCORE_PER_CHAR, COMBO_BONUS, PERFECT_MULTIPLIER } from '../config/constants';
+import { BASE_SCORE_PER_TICK, WORD_SCORE_PER_CHAR, COMBO_BONUS, PERFECT_MULTIPLIER, RUSH_BONUS_BASE } from '../config/constants';
 
 export class ScoreSystem {
   private score = 0;
@@ -28,6 +28,13 @@ export class ScoreSystem {
 
   breakCombo(): void {
     this.combo = 0;
+  }
+
+  /** 催促奖励：已拼完时点仓鼠加速；剩余进度越多（催得越早）分越高。返回实际得分 */
+  addRushBonus(progress: number, speedMultiplier: number): number {
+    const points = Math.round((1 - progress) * RUSH_BONUS_BASE * speedMultiplier);
+    this.score += points;
+    return points;
   }
 
   getCombo(): number {

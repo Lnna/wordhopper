@@ -164,6 +164,13 @@ describe('Obstacle clearing sweep', () => {
     expect(obs.getProgress()).toBeCloseTo(0.9 + 0.1 * 0.2 * 5, 5);
   });
 
+  it('claimRushReward grants only once per obstacle (防连点刷分)', () => {
+    const { obs } = makeObstacle(0.3);
+    expect(obs.claimRushReward()).toBe(true);
+    expect(obs.claimRushReward()).toBe(false);
+    expect(obs.claimRushReward()).toBe(false);
+  });
+
   it('fires onPassed only when the pack top edge crosses the player foot line', () => {
     const { obs } = makeObstacle(1.3);
     const onPassed = vi.fn();

@@ -414,9 +414,38 @@ export class GameScene extends Phaser.Scene {
 
     target.setBoost(RUSH_BOOST);
     audioSystem.play('rush');
-    this.hintText.setText(target.isJumpReady() ? '冲！障碍加速逼近' : '催促加速 · 快拼完它！');
+    if (target.isJumpReady()) {
+      // 已拼完催促 = 省时奖励分：催得越早（剩余进度越多）分越高；每障碍限一次防刷分
+      const points = target.claimRushReward()
+        ? this.scoreSystem.addRushBonus(target.getProgress(), this.speedManager.getSpeedMultiplier())
+        : 0;
+      this.hintText.setText('冲！障碍加速逼近');
+      if (points > 0) this.showFloatingScore(points);
+    } else {
+      this.hintText.setText('催促加速 · 快拼完它！');
+    }
     this.time.delayedCall(900, () => {
       if (this.hintText.active && !this.tutorial) this.hintText.setText('');
+    });
+  }
+
+  /** 仓鼠头顶飘「+N」奖励分 */
+  private showFloatingScore(points: number): void {
+    const t = addCrispText(this, PLAYER_X, PLAYER_Y - 100, `+${points}`, {
+      fontSize: '18px',
+      fontFamily: FONT_BODY,
+      color: hex(COLORS.ACCENT),
+      fontStyle: 'bold',
+      stroke: '#FFFDF5',
+      strokeThickness: 3,
+    }).setOrigin(0.5).setDepth(30);
+    this.tweens.add({
+      targets: t,
+      y: PLAYER_Y - 140,
+      alpha: 0,
+      duration: 600,
+      ease: 'Quad.easeOut',
+      onComplete: () => t.destroy(),
     });
   }
 

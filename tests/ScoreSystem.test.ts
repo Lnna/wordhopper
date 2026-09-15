@@ -80,4 +80,20 @@ describe('ScoreSystem', () => {
     expect(score.getTotalChars()).toBe(0);
     expect(score.getCombo()).toBe(0);
   });
+
+  it('rush bonus scales with remaining progress and speed multiplier', () => {
+    const score = new ScoreSystem();
+    // progress 0.2、速度 1.0 → (1-0.2)*15*1.0 = 12
+    expect(score.addRushBonus(0.2, 1.0)).toBe(12);
+    expect(score.getScore()).toBe(12);
+    // progress 0.8、速度 1.2 → 0.2*15*1.2 = 3.6 → 4
+    expect(score.addRushBonus(0.8, 1.2)).toBe(4);
+    expect(score.getScore()).toBe(16);
+  });
+
+  it('rush bonus is zero when obstacle already at hit line', () => {
+    const score = new ScoreSystem();
+    expect(score.addRushBonus(1, 1.0)).toBe(0);
+    expect(score.getScore()).toBe(0);
+  });
 });
