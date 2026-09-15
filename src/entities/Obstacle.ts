@@ -37,7 +37,8 @@ export class Obstacle {
   private root: Phaser.GameObjects.Container;
   private sprite: Phaser.GameObjects.Sprite;
   private bubbles: Phaser.GameObjects.Container[] = [];
-  private doneStrip: Phaser.GameObjects.Container;
+  private doneText: Phaser.GameObjects.Text;
+  private doneCount = 0;
   private wordBlock: Phaser.GameObjects.Container;
   private bubbleWrap!: Phaser.GameObjects.Container;
   private active = true;
@@ -55,8 +56,15 @@ export class Obstacle {
     this.root = scene.add.container(PLAYER_X, 0).setDepth(14);
 
     this.wordBlock = scene.add.container(0, 0);
-    this.doneStrip = scene.add.container(0, 0);
-    this.wordBlock.add(this.doneStrip);
+    this.doneText = addCrispText(scene, 0, 0, '', {
+      fontSize: '16px',
+      fontFamily: FONT_WORD,
+      color: '#14532d',
+      fontStyle: 'bold',
+      stroke: '#FFFDF5',
+      strokeThickness: 3,
+    }).setOrigin(1, 0.5);
+    this.wordBlock.add(this.doneText);
     this.buildBubbles(config.word);
     this.root.add(this.wordBlock);
 
@@ -92,9 +100,11 @@ export class Obstacle {
   }
 
   private layoutDoneAndBubbles(): void {
-    const doneW = Math.max(12, this.doneStrip.list.length * 16);
-    this.doneStrip.setPosition(-doneW / 2 - 8, 0);
-    this.bubbleWrap.setPosition(doneW / 2 + 8, 0);
+    const firstRowLen = Math.min(this.bubbles.length, BUBBLE_PER_ROW);
+    const bubblesW = (firstRowLen - 1) * 40 + 30;
+    const gap = this.doneText.width > 0 ? 8 : 0;
+    this.bubbleWrap.setPosition(0, 0);
+    this.doneText.setPosition(-(bubblesW / 2 + gap), 0);
   }
 
   private makeBubble(letter: string, index: number): Phaser.GameObjects.Container {
@@ -132,20 +142,8 @@ export class Obstacle {
     if (!bubble) return;
     bubble.disableInteractive();
     bubble.setVisible(false);
-    const letter = (bubble.getData('label') as Phaser.GameObjects.Text).text;
-    const ch = addCrispText(this.scene, this.doneStrip.list.length * 16, 0, letter, {
-      fontSize: '12px',
-      fontFamily: FONT_WORD,
-      color: '#14532d',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    const chBg = this.scene.add.graphics();
-    chBg.fillStyle(0x86efac, 0.9);
-    chBg.fillCircle(0, 0, 9);
-    chBg.lineStyle(1.5, 0x15803d, 0.55);
-    chBg.strokeCircle(0, 0, 9);
-    chBg.setPosition(this.doneStrip.list.length * 16, 0);
-    this.doneStrip.add([chBg, ch]);
+    this.doneCount += 1;
+    this.doneText.setText(this.config.word.slice(0, this.doneCount).toLowerCase());
     this.layoutDoneAndBubbles();
     this.highlightNext();
   }
@@ -164,6 +162,14 @@ export class Obstacle {
   markComplete(): void {
     this.canJump = true;
     this.bubbles.forEach((b) => b?.disableInteractive());
+    this.scene.tweens.add({
+      targets: this.doneText,
+      scaleX: 1.25,
+      scaleY: 1.25,
+      duration: 130,
+      yoyo: true,
+      ease: 'Back.easeOut',
+    });
   }
 
   highlightNext(): void {
@@ -185,7 +191,7 @@ export class Obstacle {
   }
 
   private getNextIndex(): number {
-    return Math.floor(this.doneStrip.list.length / 2);
+    return this.doneCount;
   }
 
   advance(dt: number, rate: number): void {

@@ -62,12 +62,27 @@ function makeScene() {
       container: (x = 0, y = 0) => makeContainer(x, y),
       sprite: () => chainable({ setOrigin() { return this; }, setDisplaySize() { return this; } }),
       graphics: () => chainable({}),
-      text: () => chainable({ setOrigin() { return this; } }),
+      text: (x = 0, y = 0, text = '') => makeText(x, y, text),
     },
     tweens: { add: vi.fn(), killTweensOf: vi.fn() },
     time: { delayedCall: vi.fn() },
     events: { emit: vi.fn(), on: vi.fn() },
   } as unknown as Phaser.Scene;
+}
+
+interface MockText {
+  x: number; y: number; text: string; width: number;
+  setText(s: string): MockText;
+  [k: string]: unknown;
+}
+
+function makeText(x = 0, y = 0, text = ''): MockText {
+  const t: MockText = {
+    x, y, text,
+    width: text.length * 10,
+    setText(s: string) { t.text = s; t.width = s.length * 10; return t; },
+  };
+  return chainable(t);
 }
 
 function makeObstacle(progress: number) {
@@ -156,5 +171,38 @@ describe('Obstacle clearing sweep', () => {
     // passed must happen at or before the player foot line crossing
     const root = (obs as unknown as { root: { y: number } }).root;
     expect(root.y).toBeGreaterThan(PLAYER_Y);
+  });
+});
+
+describe('Obstacle done text', () => {
+  it('spells the word as normal lowercase text as letters are tapped', () => {
+    const { obs } = makeObstacle(0.5);
+    const doneText = (obs as unknown as { doneText: { text: string } }).doneText;
+    expect(doneText.text).toBe('');
+    obs.onCorrectTap(0);
+    expect(doneText.text).toBe('c');
+    obs.onCorrectTap(1);
+    expect(doneText.text).toBe('ca');
+    obs.onCorrectTap(2);
+    expect(doneText.text).toBe('cat');
+  });
+
+  it('advances the next-letter index as letters complete', () => {
+    const { obs } = makeObstacle(0.5);
+    const getNext = () => (obs as unknown as { getNextIndex(): number }).getNextIndex();
+    expect(getNext()).toBe(0);
+    obs.onCorrectTap(0);
+    expect(getNext()).toBe(1);
+    obs.onCorrectTap(1);
+    expect(getNext()).toBe(2);
+  });
+
+  it('keeps remaining bubbles stationary as the done text grows', () => {
+    const { obs } = makeObstacle(0.5);
+    const wrap = (obs as unknown as { bubbleWrap: { x: number } }).bubbleWrap;
+    const xBefore = wrap.x;
+    obs.onCorrectTap(0);
+    obs.onCorrectTap(1);
+    expect(wrap.x).toBe(xBefore);
   });
 });
