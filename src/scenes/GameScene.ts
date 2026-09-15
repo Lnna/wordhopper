@@ -5,6 +5,7 @@ import {
   CANVAS_HEIGHT,
   DIFFICULTY_CONFIG,
   Difficulty,
+  GameMode,
   HIT_PROGRESS,
   INITIAL_APPROACH_RATE,
   PERFECT_WINDOW_RATIO,
@@ -58,6 +59,7 @@ export class GameScene extends Phaser.Scene {
   private speedManager = new SpeedManager();
   private obstacleSpawner!: ObstacleSpawner;
   private difficulty: Difficulty = 'easy';
+  private mode: GameMode = 'word';
   private tutorial = false;
   private tutorialStarted = false;
   private dodgeCount = 0;
@@ -83,8 +85,9 @@ export class GameScene extends Phaser.Scene {
     super({ key: 'GameScene' });
   }
 
-  init(data: { difficulty: Difficulty }): void {
+  init(data: { difficulty: Difficulty; mode?: GameMode }): void {
     this.difficulty = data.difficulty || 'easy';
+    this.mode = data.mode || 'word';
     this.wordSpawner.loadWords(this.difficulty);
   }
 
@@ -104,6 +107,7 @@ export class GameScene extends Phaser.Scene {
     this.bubbleTap.clear();
     this.obstacleSpawner = new ObstacleSpawner(this.wordSpawner);
     this.obstacleSpawner.setDifficulty(this.difficulty);
+    this.obstacleSpawner.setMode(this.mode);
 
     this.drawWorld();
     this.player = new Player(this);
@@ -116,6 +120,11 @@ export class GameScene extends Phaser.Scene {
     this.spawnObstacle(true);
     this.refreshDefinition();
 
+    // dev-only 调试句柄（生产构建会被摇树移除）
+    if (import.meta.env.DEV) {
+      (window as unknown as { __wh: unknown }).__wh = this;
+    }
+
     this.visibilityHandler = () => {
       if (document.hidden && this.alive) {
         this.scene.pause();
@@ -126,7 +135,11 @@ export class GameScene extends Phaser.Scene {
     document.addEventListener('visibilitychange', this.visibilityHandler);
 
     if (this.tutorial) {
-      this.hintText.setText('按序点字母泡，拼完后在贴身时机点空白处起跳');
+      this.hintText.setText(
+        this.mode === 'idiom'
+          ? '按序点汉字拼出成语，拼完后在贴身时机点空白处起跳'
+          : '按序点字母泡，拼完后在贴身时机点空白处起跳'
+      );
     }
   }
 
@@ -322,7 +335,9 @@ export class GameScene extends Phaser.Scene {
       this.bubbleTap.setWord(obstacle.getWord());
     }
 
-    const result = this.bubbleTap.tapIndex(index);
+    const result = this.mode === 'idiom'
+      ? this.bubbleTap.tapChar(obstacle.getCharAt(index))
+      : this.bubbleTap.tapIndex(index);
     if (result.wrong) {
       this.scoreSystem.breakCombo();
       this.comboText.setText('');
@@ -523,6 +538,7 @@ export class GameScene extends Phaser.Scene {
         bestWord: this.scoreSystem.getBestWord(),
         maxCombo: this.scoreSystem.getMaxCombo(),
         difficulty: this.difficulty,
+        mode: this.mode,
         meanings: this.seenMeanings.slice(0, 8),
       });
     });

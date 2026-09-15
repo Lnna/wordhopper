@@ -80,6 +80,9 @@ export const PERFECT_MULTIPLIER = 1.2;
 
 export type Difficulty = 'chill' | 'easy' | 'medium' | 'hard';
 
+/** 游戏模式：单词（点字母）/ 成语（8 字板接龙） */
+export type GameMode = 'word' | 'idiom';
+
 export const DIFFICULTY_CONFIG: Record<Difficulty, { minLen: number; maxLen: number; wordFile: string; speedMultiplier: number }> = {
   chill: { minLen: 3, maxLen: 5, wordFile: 'words-easy.json', speedMultiplier: 0.5 },
   easy: { minLen: 3, maxLen: 5, wordFile: 'words-easy.json', speedMultiplier: 1.0 },

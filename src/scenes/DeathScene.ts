@@ -1,17 +1,21 @@
 import Phaser from 'phaser';
 import { applyRenderZoom, isMobile } from '../config/display';
 import { COLORS, FONT_DISPLAY, FONT_BODY } from '../config/colors';
-import { Difficulty, CANVAS_WIDTH, CANVAS_HEIGHT, SPRITE_KEYS } from '../config/constants';
+import { Difficulty, GameMode, CANVAS_WIDTH, CANVAS_HEIGHT, SPRITE_KEYS } from '../config/constants';
 import { addCrispText } from '../config/text';
 import { hex, darker } from '../config/utils';
 import { buildShareURL } from './ShareCardScene';
 
-function getBestScore(difficulty: Difficulty): number {
-  try { return parseInt(localStorage.getItem(`word-hopper-best-${difficulty}`) || '0', 10); } catch { return 0; }
+function bestKey(mode: GameMode, difficulty: Difficulty): string {
+  return `word-hopper-best-${mode}-${difficulty}`;
 }
 
-function setBestScore(difficulty: Difficulty, score: number): void {
-  try { localStorage.setItem(`word-hopper-best-${difficulty}`, score.toString()); } catch { /* noop */ }
+function getBestScore(mode: GameMode, difficulty: Difficulty): number {
+  try { return parseInt(localStorage.getItem(bestKey(mode, difficulty)) || '0', 10); } catch { return 0; }
+}
+
+function setBestScore(mode: GameMode, difficulty: Difficulty, score: number): void {
+  try { localStorage.setItem(bestKey(mode, difficulty), score.toString()); } catch { /* noop */ }
 }
 
 export interface DeathData {
@@ -21,6 +25,7 @@ export interface DeathData {
   bestWord: string;
   maxCombo: number;
   difficulty: Difficulty;
+  mode?: GameMode;
   meanings?: string[];
 }
 
@@ -49,6 +54,7 @@ export class DeathScene extends Phaser.Scene {
   private gameInputHandler: ((e: KeyboardEvent) => void) | null = null;
   private keyboardHandler: ((event: KeyboardEvent) => void) | null = null;
   private difficulty: Difficulty = 'easy';
+  private mode: GameMode = 'word';
   private deathData: DeathData | null = null;
   private shareURL = '';
   private toastText: Phaser.GameObjects.Text | null = null;
@@ -60,6 +66,7 @@ export class DeathScene extends Phaser.Scene {
   create(data: DeathData): void {
     applyRenderZoom(this);
     this.difficulty = data.difficulty;
+    this.mode = data.mode || 'word';
     this.deathData = data;
     this.shareURL = buildShareURL({
       score: data.score,
@@ -124,9 +131,9 @@ export class DeathScene extends Phaser.Scene {
       padding: { right: 8, left: 2, top: 2, bottom: 2 },
     }).setOrigin(0.5).setDepth(10);
 
-    const best = getBestScore(data.difficulty);
+    const best = getBestScore(this.mode, data.difficulty);
     const isNewBest = data.score > best;
-    if (isNewBest) setBestScore(data.difficulty, data.score);
+    if (isNewBest) setBestScore(this.mode, data.difficulty, data.score);
     const displayBest = isNewBest ? data.score : best;
     const pct = displayBest > 0 ? Math.min(data.score / displayBest, 1) : 0;
 
@@ -252,7 +259,7 @@ export class DeathScene extends Phaser.Scene {
       }).setOrigin(0.5).setDepth(10);
     });
 
-    addCrispText(this, w / 2, cardsY + cardH + 12, `> ${data.difficulty.toUpperCase()} <`, {
+    addCrispText(this, w / 2, cardsY + cardH + 12, `> ${this.mode === 'idiom' ? '成语' : '单词'} · ${data.difficulty.toUpperCase()} <`, {
       fontSize: '10px',
       fontFamily: FONT_BODY,
       color: hex(COLORS.TEXT_ON_LIGHT),
@@ -337,7 +344,7 @@ export class DeathScene extends Phaser.Scene {
 
   private retry(): void {
     this.cleanup();
-    this.scene.start('GameScene', { difficulty: this.difficulty });
+    this.scene.start('GameScene', { difficulty: this.difficulty, mode: this.mode });
   }
 
   private async share(): Promise<void> {

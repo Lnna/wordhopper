@@ -50,6 +50,23 @@ export class BubbleTapSystem {
     };
   }
 
+  /** 按字符判定（成语模式）：与下一个所需字符比对 */
+  tapChar(char: string): BubbleTapResult {
+    if (!this.word || this.charIndex >= this.word.length) {
+      return { charIndex: this.charIndex, completed: this.isComplete(), wrong: false, letter: '' };
+    }
+
+    if (char !== this.word[this.charIndex]) {
+      this.wrong = true;
+      return { charIndex: this.charIndex, completed: false, wrong: true, letter: char };
+    }
+
+    this.wrong = false;
+    this.charIndex++;
+    const completed = this.charIndex >= this.word.length;
+    return { charIndex: this.charIndex, completed, wrong: false, letter: char };
+  }
+
   isComplete(): boolean {
     return this.word.length > 0 && this.charIndex >= this.word.length;
   }

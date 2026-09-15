@@ -23,12 +23,16 @@ import { hex } from '../config/utils';
 
 /** wordBlock 顶到障碍本体顶的容器内距离（本体 1.35 倍高 + 18 间距 + 字条半径余量） */
 const PACK_TOP_OFFSET = OBSTACLE_VISUAL_BASE * 1.35 + 18 + 14;
+/** 成语模式 8 字板每排字数 */
+const BOARD_PER_ROW = 4;
 
 export interface ObstacleConfig {
   obstacleType: ObstacleType;
   word: string;
   meaning: string;
   progress: number;
+  /** 成语模式：8 字板（成语 4 字 + 4 干扰字，已洗牌）；气泡按板渲染 */
+  board?: string[];
 }
 
 export class Obstacle {
@@ -48,12 +52,20 @@ export class Obstacle {
   private clearDone: (() => void) | null = null;
   private onPassed: (() => void) | null = null;
   private passedFired = false;
+  private perRow: number;
+  private packTopOffset: number;
   private hitbox = new Phaser.Geom.Rectangle(0, 0, OBSTACLE_BODY_WIDTH, OBSTACLE_BODY_WIDTH);
 
   constructor(scene: Phaser.Scene, config: ObstacleConfig) {
     this.scene = scene;
     this.config = { ...config };
     this.root = scene.add.container(PLAYER_X, 0).setDepth(14);
+
+    const rows = config.board
+      ? Math.ceil(config.board.length / BOARD_PER_ROW)
+      : Math.ceil(config.word.length / BUBBLE_PER_ROW);
+    this.perRow = config.board ? BOARD_PER_ROW : BUBBLE_PER_ROW;
+    this.packTopOffset = PACK_TOP_OFFSET + (rows - 1) * 40;
 
     this.wordBlock = scene.add.container(0, 0);
     this.doneText = addCrispText(scene, 0, 0, '', {
@@ -73,22 +85,24 @@ export class Obstacle {
     this.sprite.setDisplaySize(OBSTACLE_VISUAL_BASE, OBSTACLE_VISUAL_BASE * 1.35);
     this.root.add(this.sprite);
 
-    this.wordBlock.setY(-OBSTACLE_VISUAL_BASE * 1.35 - 18);
+    this.wordBlock.setY(-OBSTACLE_VISUAL_BASE * 1.35 - 18 - (rows - 1) * 40);
 
     this.applyLayout();
   }
 
   private buildBubbles(word: string): void {
-    const letters = word.toUpperCase().split('');
+    const items = this.config.board ?? word.toUpperCase().split('');
+    const perRow = this.perRow;
+    const fontSize = this.config.board ? '16px' : '14px';
     this.bubbleWrap = this.scene.add.container(0, 0);
     this.wordBlock.add(this.bubbleWrap);
 
-    for (let start = 0; start < letters.length; start += BUBBLE_PER_ROW) {
-      const row = this.scene.add.container(0, Math.floor(start / BUBBLE_PER_ROW) * 40);
-      const slice = letters.slice(start, start + BUBBLE_PER_ROW);
+    for (let start = 0; start < items.length; start += perRow) {
+      const row = this.scene.add.container(0, Math.floor(start / perRow) * 40);
+      const slice = items.slice(start, start + perRow);
       slice.forEach((ch, j) => {
         const index = start + j;
-        const bubble = this.makeBubble(ch, index);
+        const bubble = this.makeBubble(ch, index, fontSize);
         bubble.setPosition((j - (slice.length - 1) / 2) * 40, 0);
         row.add(bubble);
         this.bubbles[index] = bubble;
@@ -100,14 +114,14 @@ export class Obstacle {
   }
 
   private layoutDoneAndBubbles(): void {
-    const firstRowLen = Math.min(this.bubbles.length, BUBBLE_PER_ROW);
+    const firstRowLen = Math.min(this.bubbles.length, this.perRow);
     const bubblesW = (firstRowLen - 1) * 40 + 30;
     const gap = this.doneText.width > 0 ? 8 : 0;
     this.bubbleWrap.setPosition(0, 0);
     this.doneText.setPosition(-(bubblesW / 2 + gap), 0);
   }
 
-  private makeBubble(letter: string, index: number): Phaser.GameObjects.Container {
+  private makeBubble(letter: string, index: number, fontSize: string): Phaser.GameObjects.Container {
     const c = this.scene.add.container(0, 0);
     const g = this.scene.add.graphics();
     g.fillStyle(0x7dd3fc, 0.35);
@@ -119,7 +133,7 @@ export class Obstacle {
     g.lineStyle(2, 0xffffff, 0.7);
     g.strokeCircle(0, 0, 15);
     const t = addCrispText(this.scene, 0, 0, letter, {
-      fontSize: '14px',
+      fontSize,
       fontFamily: FONT_WORD,
       color: '#1e3a2f',
       fontStyle: 'bold',
@@ -191,7 +205,21 @@ export class Obstacle {
   }
 
   private getNextIndex(): number {
-    return this.doneCount;
+    if (!this.config.board) return this.doneCount;
+    // 成语模式：高亮「下一个所需字」所在的可见槽位（重复字跳过已隐藏的）
+    const needed = this.config.word[this.doneCount];
+    if (!needed) return -1;
+    return this.bubbles.findIndex((b, i) => !!b?.visible && this.config.board![i] === needed);
+  }
+
+  /** 槽位字符（成语模式供 tapChar 判定用） */
+  getCharAt(slot: number): string {
+    if (this.config.board) return this.config.board[slot] ?? '';
+    return this.config.word[slot] ?? '';
+  }
+
+  isBoard(): boolean {
+    return !!this.config.board;
   }
 
   advance(dt: number, rate: number): void {
@@ -226,7 +254,7 @@ export class Obstacle {
     if (this.clearing) {
       const t = (p - this.clearStartProgress) / (CLEAR_EXIT_PROGRESS - this.clearStartProgress);
       this.root.setAlpha(Math.max(0, 1 - t));
-      const topEdge = y - PACK_TOP_OFFSET * scale;
+      const topEdge = y - this.packTopOffset * scale;
       if (topEdge >= PLAYER_Y) this.firePassed();
     } else {
       this.root.setAlpha(1);

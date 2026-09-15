@@ -1,6 +1,9 @@
 node_modules
 dist
 
+# 成语库生成脚本的原始数据缓存
+scripts/.cache
+
 # Python
 __pycache__
 *.pyc
